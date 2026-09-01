@@ -42,15 +42,18 @@ android {
 
     signingConfigs {
         create("release") {
-            val keyAliasProp = keystoreProperties.getProperty("keyAlias") ?: keystoreProperties.getProperty("keyalias")
-            val keyPasswordProp = keystoreProperties.getProperty("keyPassword") ?: keystoreProperties.getProperty("keypassword")
-            val storeFileProp = keystoreProperties.getProperty("storeFile") ?: keystoreProperties.getProperty("storefile")
-            val storePasswordProp = keystoreProperties.getProperty("storePassword") ?: keystoreProperties.getProperty("storepassword")
+            val keyAliasProp = System.getenv("KEY_ALIAS") ?: keystoreProperties.getProperty("keyAlias") ?: keystoreProperties.getProperty("keyalias")
+            val keyPasswordProp = System.getenv("KEY_PASSWORD") ?: keystoreProperties.getProperty("keyPassword") ?: keystoreProperties.getProperty("keypassword")
+            val storeFileProp = System.getenv("STORE_FILE") ?: keystoreProperties.getProperty("storeFile") ?: keystoreProperties.getProperty("storefile") ?: "upload-keystore.jks"
+            val storePasswordProp = System.getenv("STORE_PASSWORD") ?: keystoreProperties.getProperty("storePassword") ?: keystoreProperties.getProperty("storepassword")
 
-            if (keyAliasProp != null && keyPasswordProp != null && storeFileProp != null && storePasswordProp != null) {
+            val targetFile = file(storeFileProp)
+            val fallbackFile = file("../app/$storeFileProp")
+
+            if (keyAliasProp != null && keyPasswordProp != null && storePasswordProp != null && (targetFile.exists() || fallbackFile.exists())) {
                 keyAlias = keyAliasProp
                 keyPassword = keyPasswordProp
-                storeFile = file(storeFileProp)
+                storeFile = if (targetFile.exists()) targetFile else fallbackFile
                 storePassword = storePasswordProp
             }
         }
