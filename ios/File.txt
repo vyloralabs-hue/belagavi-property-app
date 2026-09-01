@@ -1,0 +1,9 @@
+I have attached the exact `GoogleService-Info.plist` file for this VedaCosmic AI project. 
+
+Please process this attached file directly and execute the following tasks:
+1. Save this attached file directly into `ios/Runner/GoogleService-Info.plist`, replacing any dummy/existing file.
+2. Verify that the Bundle ID in `ios/Runner/Info.plist` matches the Bundle Identifier specified inside this plist file.
+3. Fix all web-runner startup crashes by ensuring `main.dart` guards all `dart:io` or device platform initializations with `kIsWeb`.
+4. Start the clean Web Server on Port 3000:
+   flutter run -d web-server --web-port=3000 --web-hostname=localhost
+5. Open http://localhost:3000 in my Mac browser automatically using `open http://localhost:3000`.

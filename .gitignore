@@ -1,0 +1,78 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+.gradle/
+captures/
+gradle-app.setting
+
+# VS Code
+.vscode/
+
+# Build outputs & Intermediates
+build/
+/build/
+**/build/
+android/app/build/
+android/app/Users/
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Flutter / Dart / Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/coverage/
+
+# Binaries & Large Files (>50MB)
+*.aab
+*.apk
+*.jar
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.so
+*.dylib
+*.dll
+*.dmg
+*.iso
+*.ipa
+
+# Keys, Credentials & Local Configs
+*.keystore
+*.jks
+key.properties
+local.properties
+.env*
+node_modules/
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# iOS build outputs
+ios/Pods/
+ios/Runner.xcworkspace/

@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "1031008602596",
+    "project_id": "belagavi-property",
+    "storage_bucket": "belagavi-property.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1031008602596:android:771ba8306602e04d1e5ff1",
+        "android_client_info": {
+          "package_name": "com.belagavi.belagavi_property"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1031008602596-kncq32bagn45bmoamjc0bfm06rpk51mc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.belagavi.belagavi_property",
+            "certificate_hash": "b2c0945cc5cc4723dcee2687565fcc90c57920de"
+          }
+        },
+        {
+          "client_id": "1031008602596-android-release.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.belagavi.belagavi_property",
+            "certificate_hash": "22f1af982e59e8dce42c71c88af4ed6a1c03c5a0"
+          }
+        },
+        {
+          "client_id": "1031008602596-ha9oarf6dnorgne365kqgadm5fgfv8b4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQghhpxMGfk9d2B-cihxEw0wKep8Eo24E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1031008602596-ha9oarf6dnorgne365kqgadm5fgfv8b4.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1031008602596-8vqt7l7nickkvhr9bft2jrtg4ikebfsl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.belagavi.belagaviProperty"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
