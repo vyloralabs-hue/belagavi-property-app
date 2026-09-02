@@ -269,7 +269,7 @@ class _UniversalLocationSearchModalState
     return ListView.separated(
       shrinkWrap: true,
       itemCount: _suggestions.length,
-      separatorBuilder: (_, _) => Divider(color: borderCol, height: 1),
+      separatorBuilder: (_, __) => Divider(color: borderCol, height: 1),
       itemBuilder: (context, index) {
         final candidate = _suggestions[index];
         final Color badgeColor;

@@ -23,5 +23,10 @@ Future<void> configureDependencies() async {
 }
 
 Future<void> initializeApp(String environment) async {
+  try {
+    await configureDependencies();
+  } catch (e) {
+    AppLogger.w('Dependencies init warning: $e');
+  }
   await AppBootstrap.instance.initialize(environment);
 }

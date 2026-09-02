@@ -87,9 +87,10 @@ class PropertyAnalyticsService {
   final Future<void> Function(List<PropertyAnalyticsEvent>)? _batchFlushHandler;
 
   PropertyAnalyticsService({
-    this._bufferCapacity = 50,
+    int bufferCapacity = 50,
     Future<void> Function(List<PropertyAnalyticsEvent>)? batchFlushHandler,
-  }) : _batchFlushHandler = batchFlushHandler;
+  })  : _bufferCapacity = bufferCapacity,
+        _batchFlushHandler = batchFlushHandler;
 
   List<PropertyAnalyticsEvent> get bufferedEvents =>
       List.unmodifiable(_eventBuffer);

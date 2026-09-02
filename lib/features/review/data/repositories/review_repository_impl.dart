@@ -16,9 +16,10 @@ class ReviewRepositoryImpl implements ReviewRepository {
   final Map<String, ReviewReportEntity> _reports = {};
 
   ReviewRepositoryImpl({
-    this._supabaseService,
+    SupabaseService? supabaseService,
     NotificationRepository? notificationRepository,
-  }) : _notificationRepository = notificationRepository;
+  })  : _supabaseService = supabaseService,
+        _notificationRepository = notificationRepository;
 
   @override
   Future<PropertyReviewEntity> submitPropertyReview(
