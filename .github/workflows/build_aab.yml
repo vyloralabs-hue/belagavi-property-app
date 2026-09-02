@@ -65,12 +65,16 @@ jobs:
           storeFile=upload-keystore.jks
           EOF
 
-      - name: Build AppBundle
+      - name: Build Release AppBundle via Gradle
+        working-directory: android
         env:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-        run: flutter build appbundle --flavor prod -t lib/main_prod.dart --release -v
+        run: |
+          ./gradlew bundleProdRelease
+          mkdir -p ../build/app/outputs/bundle/prodRelease
+          cp app/build/outputs/bundle/prodRelease/*.aab ../build/app/outputs/bundle/prodRelease/app-prod-release.aab
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
