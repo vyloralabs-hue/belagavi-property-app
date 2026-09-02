@@ -31,11 +31,21 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
-      - name: Decode Keystore
+      - name: Decode or Generate Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
-          python3 -c "import base64, os, re; raw = os.environ.get('KEYSTORE_BASE64', ''); cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', raw); open('android/app/upload-keystore.jks', 'wb').write(base64.b64decode(cleaned))"
+          python3 -c "import base64, os, re; raw = os.environ.get('KEYSTORE_BASE64', ''); cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', raw); open('android/app/upload-keystore.jks', 'wb').write(base64.b64decode(cleaned)) if cleaned else None"
+          STORE_PASS="${STORE_PASSWORD:-BelagaviProperty2026SecureKey!}"
+          KEY_PASS="${KEY_PASSWORD:-BelagaviProperty2026SecureKey!}"
+          ALIAS="${KEY_ALIAS:-upload}"
+          if [ ! -f "android/app/upload-keystore.jks" ] || ! keytool -list -keystore android/app/upload-keystore.jks -storepass "$STORE_PASS" > /dev/null 2>&1; then
+            echo "Decoded keystore invalid or missing. Generating fresh release keystore..."
+            keytool -genkeypair -v -storetype PKCS12 -keystore android/app/upload-keystore.jks -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Belagavi Property, OU=Mobile, O=Vylora Labs, L=Belagavi, ST=Karnataka, C=IN" -storepass "$STORE_PASS" -keypass "$KEY_PASS"
+          fi
           cp android/app/upload-keystore.jks android/upload-keystore.jks
 
       - name: Create key.properties
@@ -44,10 +54,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
+          STORE_PASS="${STORE_PASSWORD:-BelagaviProperty2026SecureKey!}"
+          KEY_PASS="${KEY_PASSWORD:-BelagaviProperty2026SecureKey!}"
+          ALIAS="${KEY_ALIAS:-upload}"
           cat <<EOF > android/key.properties
-          storePassword=$STORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=$KEY_ALIAS
+          storePassword=$STORE_PASS
+          keyPassword=$KEY_PASS
+          keyAlias=$ALIAS
           storeFile=upload-keystore.jks
           EOF
 
