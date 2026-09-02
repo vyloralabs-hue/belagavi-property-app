@@ -47,26 +47,29 @@ android {
             val storeFileProp = System.getenv("STORE_FILE") ?: keystoreProperties.getProperty("storeFile") ?: keystoreProperties.getProperty("storefile") ?: "upload-keystore.jks"
             val storePasswordProp = System.getenv("STORE_PASSWORD") ?: keystoreProperties.getProperty("storePassword") ?: keystoreProperties.getProperty("storepassword")
 
-            val targetFile = file(storeFileProp)
-            val fallbackFile = file("../app/$storeFileProp")
+            val appKeystore = rootProject.file("app/$storeFileProp")
+            val rootKeystore = rootProject.file(storeFileProp)
+            val directKeystore = file(storeFileProp)
 
-            if (keyAliasProp != null && keyPasswordProp != null && storePasswordProp != null && (targetFile.exists() || fallbackFile.exists())) {
+            val resolvedKeystore = when {
+                appKeystore.exists() -> appKeystore
+                rootKeystore.exists() -> rootKeystore
+                directKeystore.exists() -> directKeystore
+                else -> directKeystore
+            }
+
+            if (keyAliasProp != null && keyPasswordProp != null && storePasswordProp != null) {
                 keyAlias = keyAliasProp
                 keyPassword = keyPasswordProp
-                storeFile = if (targetFile.exists()) targetFile else fallbackFile
+                storeFile = resolvedKeystore
                 storePassword = storePasswordProp
             }
         }
     }
 
     buildTypes {
-        release {
-            val releaseSigning = signingConfigs.findByName("release")
-            if (releaseSigning?.storeFile?.exists() == true) {
-                signingConfig = releaseSigning
-            } else {
-                signingConfig = signingConfigs.getByName("debug")
-            }
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
