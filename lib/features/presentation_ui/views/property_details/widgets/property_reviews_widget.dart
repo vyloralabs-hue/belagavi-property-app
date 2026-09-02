@@ -189,7 +189,7 @@ class PropertyReviewsWidget extends ConsumerWidget {
                 color: AppDesignSystem.brandGold,
               ),
             ),
-            error: (_, _) => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
           ),
 
           const SizedBox(height: 16),
@@ -215,7 +215,7 @@ class PropertyReviewsWidget extends ConsumerWidget {
               );
             },
             loading: () => const SizedBox.shrink(),
-            error: (_, _) => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
           ),
         ],
       ),

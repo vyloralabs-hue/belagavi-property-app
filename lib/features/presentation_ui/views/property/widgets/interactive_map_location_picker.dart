@@ -285,7 +285,7 @@ class _InteractiveMapLocationPickerState
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: _suggestions.length,
-                separatorBuilder: (_, _) =>
+                separatorBuilder: (_, __) =>
                     Divider(height: 1, color: borderCol),
                 itemBuilder: (context, idx) {
                   final s = _suggestions[idx];
@@ -404,7 +404,7 @@ class _InteractiveMapLocationPickerState
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: MapConfiguration.majorIndianCities.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (context, idx) {
                         final city = MapConfiguration.majorIndianCities[idx];
                         final isSel = _selectedCity == city.city;

@@ -397,7 +397,7 @@ class _CategoryLandingViewState extends ConsumerState<CategoryLandingView> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: _subFilters.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
                     itemBuilder: (context, idx) {
                       final filter = _subFilters[idx];
                       final isSelected = _selectedSubFilter == filter;
@@ -666,7 +666,7 @@ class _CategoryLandingViewState extends ConsumerState<CategoryLandingView> {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: filtered.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
         final prop = filtered[index];
         return _buildCategoryPropertyCard(context, prop);

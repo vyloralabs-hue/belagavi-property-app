@@ -16,9 +16,10 @@ class PromotionRepositoryImpl implements PromotionRepository {
   final Map<String, UserEntitlementEntity> _entitlements = {};
 
   PromotionRepositoryImpl({
-    this._supabaseService,
+    SupabaseService? supabaseService,
     NotificationRepository? notificationRepository,
-  }) : _notificationRepository = notificationRepository;
+  })  : _supabaseService = supabaseService,
+        _notificationRepository = notificationRepository;
 
   @override
   Future<PropertyPromotionEntity> createPropertyPromotion({

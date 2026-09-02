@@ -302,7 +302,7 @@ class _DiscoveryPropertyCard extends ConsumerWidget {
                     height: 160,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => _PlaceholderImage(),
+                    errorBuilder: (_, __, ___) => _PlaceholderImage(),
                   )
                 : _PlaceholderImage(),
           ),

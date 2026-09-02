@@ -161,7 +161,7 @@ class UserProfileView extends ConsumerWidget {
                             ? Image.network(
                                 displayPhotoUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => const Center(
+                                errorBuilder: (_, __, ___) => const Center(
                                   child: Icon(
                                     Icons.person_rounded,
                                     size: 36,
@@ -937,7 +937,7 @@ void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: roles.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (ctx, idx) {
                       final item = roles[idx];
                       final role = item['role'] as UserRoleEnum;

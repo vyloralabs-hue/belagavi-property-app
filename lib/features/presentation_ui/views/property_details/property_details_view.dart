@@ -744,7 +744,7 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
                         ].where((s) => s.isNotEmpty).join(', ');
                         final parts = <String>[
                           if (prefix.isNotEmpty) prefix,
-                          ?areaStr,
+                          if (areaStr != null && areaStr.isNotEmpty) areaStr,
                           if (locality.isNotEmpty) locality,
                         ];
 

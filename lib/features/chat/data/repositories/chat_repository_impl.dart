@@ -18,9 +18,10 @@ class ChatRepositoryImpl implements ChatRepository {
   _streamControllers = {};
 
   ChatRepositoryImpl({
-    this._supabaseService,
+    SupabaseService? supabaseService,
     NotificationRepository? notificationRepository,
-  }) : _notificationRepository = notificationRepository;
+  })  : _supabaseService = supabaseService,
+        _notificationRepository = notificationRepository;
 
   @override
   Future<PropertyConversationEntity> getOrCreateConversation({

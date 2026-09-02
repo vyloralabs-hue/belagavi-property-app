@@ -1,4 +1,4 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -438,7 +438,7 @@ class _AdminPropertyManagementViewState
                         ? Image.network(
                             coverMedia.mediaUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
+                            errorBuilder: (_, __, ___) => const Icon(
                               Icons.apartment_rounded,
                               size: 32,
                               color: Color(0xFF94A3B8),

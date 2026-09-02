@@ -112,7 +112,7 @@ class _UserConversationsListViewState
             : ListView.separated(
                 padding: const EdgeInsets.all(16),
                 itemCount: chatState.conversations.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final conv = chatState.conversations[index];
                   final isBuyer = conv.buyerId == currentUserId;
