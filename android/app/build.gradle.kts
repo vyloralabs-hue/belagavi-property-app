@@ -84,6 +84,7 @@ android {
         }
         create("prod") {
             dimension = "env"
+            isDefault = true
             versionCode = 50
             versionName = "1.0.50"
         }
