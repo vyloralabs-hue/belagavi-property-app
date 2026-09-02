@@ -49,6 +49,7 @@ android/app/Users/
 *.aab
 *.apk
 *.jar
+!**/gradle-wrapper.jar
 *.zip
 *.tar.gz
 *.tgz
