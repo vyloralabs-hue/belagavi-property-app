@@ -43,7 +43,8 @@ jobs:
           KEY_PASS="${KEY_PASSWORD:-BelagaviProperty2026SecureKey!}"
           ALIAS="${KEY_ALIAS:-upload}"
           if [ ! -f "android/app/upload-keystore.jks" ] || ! keytool -list -keystore android/app/upload-keystore.jks -storepass "$STORE_PASS" > /dev/null 2>&1; then
-            echo "Decoded keystore invalid or missing. Generating fresh release keystore..."
+            echo "Decoded keystore invalid or missing. Removing corrupted file and generating fresh release keystore..."
+            rm -f android/app/upload-keystore.jks
             keytool -genkeypair -v -storetype PKCS12 -keystore android/app/upload-keystore.jks -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Belagavi Property, OU=Mobile, O=Vylora Labs, L=Belagavi, ST=Karnataka, C=IN" -storepass "$STORE_PASS" -keypass "$KEY_PASS"
           fi
           cp android/app/upload-keystore.jks android/upload-keystore.jks
