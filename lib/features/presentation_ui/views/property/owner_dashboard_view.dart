@@ -7,6 +7,7 @@ import 'package:belagavi_property/features/property/domain/entities/owner_analyt
 import 'package:belagavi_property/features/property/presentation/providers/owner_analytics_notifier.dart';
 import 'package:belagavi_property/features/property/presentation/providers/property_providers.dart';
 import '../../theme/app_design_system.dart';
+import 'package:belagavi_property/features/property/utils/owner_identity_bridge.dart';
 import '../monetization/promote_property_modal.dart';
 
 class OwnerDashboardView extends ConsumerStatefulWidget {
@@ -55,7 +56,10 @@ class _OwnerDashboardViewState extends ConsumerState<OwnerDashboardView>
         FirebaseAuth.instance.currentUser?.uid ?? widget.ownerId;
 
     // Security Check: Route protection against unauthorized access
-    if (currentUserId != widget.ownerId) {
+    if (!OwnerIdentityBridge.isOwnerSync(
+      callerId: currentUserId,
+      propertyOwnerId: widget.ownerId,
+    )) {
       return Scaffold(
         backgroundColor: AppDesignSystem.backgroundWhite,
         appBar: AppBar(title: const Text('Access Denied')),

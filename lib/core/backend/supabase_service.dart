@@ -8,10 +8,7 @@ class SupabaseService {
 
   bool get isInitialized {
     try {
-      final c = client;
-      if (c.auth.currentSession == null && c.rest.headers.isEmpty) {
-        return false;
-      }
+      final _ = Supabase.instance.client;
       return true;
     } catch (_) {
       return false;

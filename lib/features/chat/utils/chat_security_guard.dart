@@ -1,6 +1,7 @@
 import 'package:belagavi_property/core/errors/security_exceptions.dart';
 import 'package:belagavi_property/core/security/user_role.dart';
 import 'package:belagavi_property/features/property/domain/entities/property_entities.dart';
+import 'package:belagavi_property/features/property/utils/owner_identity_bridge.dart';
 import '../domain/entities/chat_entities.dart';
 
 class ChatSecurityGuard {
@@ -65,7 +66,11 @@ class ChatSecurityGuard {
     if (buyerId.trim().isEmpty) {
       throw const AccessDeniedException('Buyer authentication required to start a chat.');
     }
-    if (buyerId == sellerId || buyerId == property.ownerId) {
+    if (buyerId == sellerId ||
+        OwnerIdentityBridge.isOwnerSync(
+          callerId: buyerId,
+          propertyOwnerId: property.ownerId,
+        )) {
       throw const AccessDeniedException('You cannot initiate a chat on your own property.');
     }
     if (sellerId != property.ownerId) {

@@ -7,6 +7,7 @@ import 'package:belagavi_property/features/property/domain/entities/property_ent
 import 'package:belagavi_property/features/property/presentation/providers/property_providers.dart';
 import 'package:belagavi_property/features/property/presentation/providers/favorites_notifier.dart';
 import 'package:belagavi_property/features/property/presentation/widgets/app_property_image.dart';
+import 'package:belagavi_property/features/property/services/property_media_resolver.dart';
 import 'package:belagavi_property/features/auth/utils/auth_session_storage_helper.dart';
 
 /// Real Property Feed — Production Dual-Theme Architecture
@@ -32,7 +33,7 @@ class _HomeRealPropertyFeedState extends ConsumerState<HomeRealPropertyFeed> {
   Future<void> _loadLiveProperties() async {
     try {
       final repo = ref.read(propertyRepositoryProvider);
-      final result = await repo.getProperties(limit: 10);
+      final result = await repo.getProperties(limit: 20);
       result.fold(
         (_) {
           if (mounted) {
@@ -44,11 +45,12 @@ class _HomeRealPropertyFeedState extends ConsumerState<HomeRealPropertyFeed> {
         },
         (paginated) {
           if (mounted) {
-            // Filter strictly for active / published listings for public marketplace
+            // Filter strictly for active / published listings that are not on hold
             final activeOnly = paginated.where((p) =>
-              p.status == ListingStatus.active ||
-              p.status == ListingStatus.published ||
-              p.status == ListingStatus.approved
+              (p.status == ListingStatus.active ||
+               p.status == ListingStatus.published ||
+               p.status == ListingStatus.approved) &&
+              !p.isPaused
             ).toList();
 
             setState(() {
@@ -272,9 +274,6 @@ class _RealPropertyCard extends ConsumerWidget {
     final cardBg = isDark ? const Color(0xFF131B2A) : Colors.white;
     final borderCol = AppDesignSystem.borderCol(context);
 
-    final coverMedia = property.mediaList.where((m) => m.isCover).firstOrNull ??
-        property.mediaList.firstOrNull;
-
     final isFav = ref.watch(favoritesNotifierProvider.select((s) => s.favorites.any((f) => f.propertyId == property.id)));
     final areaLabel = _getAreaLabel(property);
 
@@ -299,7 +298,7 @@ class _RealPropertyCard extends ConsumerWidget {
                   height: 130,
                   width: double.infinity,
                   child: AppPropertyImage(
-                    imageUrl: coverMedia?.mediaUrl,
+                    imageUrl: PropertyMediaResolver.getCoverUrl(property),
                     height: 130,
                     width: double.infinity,
                     fit: BoxFit.cover,

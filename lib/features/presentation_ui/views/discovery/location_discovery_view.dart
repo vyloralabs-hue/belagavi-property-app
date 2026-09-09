@@ -8,7 +8,7 @@ import '../../../property/presentation/providers/favorites_notifier.dart';
 import '../../../../core/utils/number_formatter.dart';
 import '../../../../core/localization/localization_provider.dart';
 import '../../../../core/localization/language_selector_modal.dart';
-import '../search/widgets/location_selector_modal.dart';
+import '../search/widgets/universal_location_search_modal.dart';
 
 /// Dynamic location discovery page.
 /// Accepts a location name via the route parameter and shows all matching properties.
@@ -99,12 +99,7 @@ class _LocationDiscoveryViewState extends ConsumerState<LocationDiscoveryView> {
           IconButton(
             icon: const Icon(Icons.tune, color: AppDesignSystem.primaryNavy),
             tooltip: 'Change Location',
-            onPressed: () => showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (_) => const LocationSelectorModal(),
-            ),
+            onPressed: () => UniversalLocationSearchModal.show(context),
           ),
         ],
       ),

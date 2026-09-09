@@ -1,0 +1,6 @@
+﻿# Supabase Local Configuration for Belagavi Property (PropertyHub)
+# Project Ref: fzgfgimscwrafnhahzlk
+
+[auth.third_party.firebase]
+enabled = true
+project_id = "belagavi-property"

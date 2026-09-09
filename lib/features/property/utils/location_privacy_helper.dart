@@ -43,6 +43,12 @@ class LocationPrivacyHelper {
       longitude: sanitizeCoordinate(property.longitude), // Approximate locality marker
       viewsCount: property.viewsCount,
       features: sanitizedFeatures,
+      listingAccessType: property.listingAccessType,
+      listingAccessStartedAt: property.listingAccessStartedAt,
+      freeListingExpiresAt: property.freeListingExpiresAt,
+      listingExpiresAt: property.listingExpiresAt,
+      activePlanId: property.activePlanId,
+      isGrandfathered: property.isGrandfathered,
       createdAt: property.createdAt,
       updatedAt: property.updatedAt,
     );
@@ -81,6 +87,12 @@ class LocationPrivacyHelper {
       longitude: sanitizeCoordinate(property.longitude),
       viewsCount: property.viewsCount,
       features: sanitizedFeatures,
+      listingAccessType: property.listingAccessType,
+      listingAccessStartedAt: property.listingAccessStartedAt,
+      freeListingExpiresAt: property.freeListingExpiresAt,
+      listingExpiresAt: property.listingExpiresAt,
+      activePlanId: property.activePlanId,
+      isGrandfathered: property.isGrandfathered,
       createdAt: property.createdAt,
       updatedAt: property.updatedAt,
     );

@@ -51,6 +51,13 @@ abstract class PropertyRepository {
     UserRole? userRole,
   });
 
+  FutureEither<PropertyEntity> setPropertyPaused({
+    required String propertyId,
+    required bool isPaused,
+    required String authenticatedUserId,
+    UserRole? userRole,
+  });
+
   FutureEither<void> deleteProperty(
     String id, {
     required String authenticatedUserId,

@@ -47,6 +47,12 @@ abstract class DisputeRemoteDataSource {
     UserRole? userRole,
   });
 
+  Future<PropertyDisputeEntity> updateDispute(
+    PropertyDisputeEntity dispute, {
+    required String authenticatedUserId,
+    UserRole? userRole,
+  });
+
   Future<PropertyDisputeEntity> updateDisputeStatus({
     required String disputeId,
     required DisputeVerificationStatus newStatus,
@@ -80,6 +86,7 @@ abstract class DisputeRemoteDataSource {
     required String disputeId,
     required String fileName,
     required Uint8List fileBytes,
+    String? authenticatedUserId,
   });
 }
 
@@ -403,6 +410,48 @@ class DisputeRemoteDataSourceImpl extends BaseRemoteDataSource implements Disput
   }
 
   @override
+  Future<PropertyDisputeEntity> updateDispute(
+    PropertyDisputeEntity dispute, {
+    required String authenticatedUserId,
+    UserRole? userRole,
+  }) async {
+    return safeQuery(() async {
+      final existing = _testRegistry[dispute.id] ??
+          await fetchDisputeById(dispute.id, requestingUserId: authenticatedUserId, userRole: userRole);
+
+      if (existing != null) {
+        final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
+        final isCreator = existing.creatorId == authenticatedUserId || existing.reportedBy == authenticatedUserId;
+        if (!isAuthorized && !isCreator) {
+          throw const UnauthorizedException('Unauthorized to edit this dispute record.');
+        }
+      }
+
+      final updated = dispute.copyWith(lastUpdated: DateTime.now());
+      _testRegistry[dispute.id] = updated;
+
+      if (_supabaseService.isInitialized) {
+        final payload = updated.toSupabaseMap();
+        payload['creator_id'] = updated.creatorId.isNotEmpty ? updated.creatorId : authenticatedUserId;
+        await _supabaseService.from('dispute_listings').update(payload).eq('id', dispute.id);
+
+        // Audit event
+        await _supabaseService.from('dispute_events').insert({
+          'id': _generateUuidV4(),
+          'dispute_id': dispute.id,
+          'event_type': 'updated',
+          'actor_id': authenticatedUserId,
+          'actor_role': (userRole != null && userRole.isAdminOrFounder) ? 'admin' : 'user',
+          'description': 'Disputed property details updated.',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      return updated;
+    });
+  }
+
+  @override
   Future<PropertyDisputeEntity> updateDisputeStatus({
     required String disputeId,
     required DisputeVerificationStatus newStatus,
@@ -467,12 +516,42 @@ class DisputeRemoteDataSourceImpl extends BaseRemoteDataSource implements Disput
     UserRole? userRole,
   }) async {
     return safeQuery(() async {
-      final isAuthorized = userRole != null && userRole.isAdminOrFounder;
-      if (!isAuthorized) {
-        throw const UnauthorizedException('Unauthorized to delete dispute.');
+      final existing = _testRegistry[disputeId] ??
+          await fetchDisputeById(disputeId, requestingUserId: authenticatedUserId, userRole: userRole);
+
+      final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
+      final isCreator = existing != null && (existing.creatorId == authenticatedUserId || existing.reportedBy == authenticatedUserId);
+      final isDraftOrReview = existing != null && (
+        existing.verificationStatus == DisputeVerificationStatus.draft ||
+        existing.verificationStatus == DisputeVerificationStatus.submitted ||
+        existing.verificationStatus == DisputeVerificationStatus.underReview
+      );
+
+      if (!isAuthorized && !(isCreator && isDraftOrReview)) {
+        throw const UnauthorizedException('Unauthorized to delete dispute listing.');
       }
 
+      _testRegistry.remove(disputeId);
+
       if (_supabaseService.isInitialized) {
+        // 1. Cleanup storage files for this dispute
+        try {
+          final docRows = await _supabaseService.from('dispute_documents').select('storage_path').eq('dispute_id', disputeId);
+          final pathsToRemove = <String>[];
+          for (final row in (docRows as List)) {
+            final p = row['storage_path'] as String?;
+            if (p != null && p.isNotEmpty && !p.startsWith('http')) {
+              pathsToRemove.add(p);
+            }
+          }
+          if (pathsToRemove.isNotEmpty) {
+            await _supabaseService.client.storage.from('property-media').remove(pathsToRemove);
+          }
+        } catch (e) {
+          AppLogger.w('deleteDispute storage cleanup warning: $e');
+        }
+
+        // 2. Cascade delete from dispute_listings
         await _supabaseService.from('dispute_listings').delete().eq('id', disputeId);
       }
     });
@@ -572,20 +651,25 @@ class DisputeRemoteDataSourceImpl extends BaseRemoteDataSource implements Disput
     required String disputeId,
     required String fileName,
     required Uint8List fileBytes,
+    String? authenticatedUserId,
   }) async {
     return safeQuery(() async {
+      final uid = (authenticatedUserId != null && authenticatedUserId.isNotEmpty)
+          ? authenticatedUserId
+          : 'usr_anonymous';
+
       if (!_supabaseService.isInitialized) {
-        return 'https://fzgfgimscwrafnhahzlk.supabase.co/storage/v1/object/public/property-media/disputes/$disputeId/$fileName';
+        return 'https://fzgfgimscwrafnhahzlk.supabase.co/storage/v1/object/public/property-media/disputes/$uid/$disputeId/$fileName';
       }
 
       try {
-        final path = 'disputes/$disputeId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+        final path = 'disputes/$uid/$disputeId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
         await _supabaseService.client.storage.from('property-media').uploadBinary(path, fileBytes);
         final publicUrl = _supabaseService.client.storage.from('property-media').getPublicUrl(path);
         return publicUrl;
       } catch (e) {
         AppLogger.w('uploadDisputeDocumentFile failed to upload: $e');
-        return 'https://fzgfgimscwrafnhahzlk.supabase.co/storage/v1/object/public/property-media/disputes/$disputeId/$fileName';
+        return 'https://fzgfgimscwrafnhahzlk.supabase.co/storage/v1/object/public/property-media/disputes/$uid/$disputeId/$fileName';
       }
     });
   }

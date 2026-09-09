@@ -242,6 +242,16 @@ class MyDisputedPropertiesNotifier extends StateNotifier<MyDisputedPropertiesSta
     final updated = [dispute, ...state.disputes.where((d) => d.id != dispute.id)];
     state = state.copyWith(disputes: updated);
   }
+
+  void updateDisputeLocally(PropertyDisputeEntity updated) {
+    final list = state.disputes.map((d) => d.id == updated.id ? updated : d).toList();
+    state = state.copyWith(disputes: list);
+  }
+
+  void removeDisputeLocally(String disputeId) {
+    final list = state.disputes.where((d) => d.id != disputeId).toList();
+    state = state.copyWith(disputes: list);
+  }
 }
 
 final myDisputedPropertiesNotifierProvider = StateNotifierProvider<MyDisputedPropertiesNotifier, MyDisputedPropertiesState>((ref) {
@@ -652,6 +662,104 @@ class AddDisputeWizardNotifier extends StateNotifier<AddDisputeWizardState> {
       (created) {
         state = state.copyWith(isSubmitting: false, createdDisputeId: created.id);
         return created;
+      },
+    );
+  }
+
+  void populateForEdit(PropertyDisputeEntity dispute) {
+    state = state.copyWith(
+      createdDisputeId: dispute.id,
+      title: dispute.title,
+      propertyType: dispute.propertyType,
+      state: dispute.state,
+      district: dispute.district ?? 'Belagavi',
+      taluk: dispute.taluk ?? 'Belagavi',
+      city: dispute.city,
+      locality: dispute.locality,
+      village: dispute.village ?? '',
+      surveyNumber: dispute.surveyCtsNumber ?? '',
+      propertyNumber: dispute.propertyNumber ?? '',
+      plotFlatShopNumber: dispute.plotFlatShopNumber ?? '',
+      propertyArea: dispute.propertyArea,
+      areaUnit: dispute.areaUnit,
+      disputeCategory: dispute.disputeCategory,
+      factualSummary: dispute.factualSummary ?? dispute.description,
+      claimedDisputeNature: dispute.claimedDisputeNature ?? '',
+      claimingPartyRole: dispute.claimingPartyRole,
+      respondingPartyRole: dispute.respondingPartyRole ?? '',
+      currentStage: dispute.currentStage,
+      disputeStartDate: dispute.disputeStartDate ?? '',
+      caseNumber: dispute.caseNumber ?? '',
+      courtAuthorityName: dispute.courtAuthority ?? '',
+      caseFilingDate: dispute.caseFilingDate ?? '',
+      nextHearingDate: dispute.nextHearingDate ?? '',
+      caseOrdersNotes: dispute.caseOrdersNotes ?? '',
+      agreedToDisclaimer: true,
+      documents: dispute.documents.map((d) => SelectedDisputeDocument(
+        fileName: d.documentType,
+        documentType: d.documentType,
+        bytes: Uint8List(0),
+        uploadedUrl: d.effectiveUrl,
+        uploadStatus: 'UPLOADED',
+      )).toList(),
+    );
+  }
+
+  Future<PropertyDisputeEntity?> updateDispute(PropertyDisputeEntity existing, String authenticatedUserId, {bool asDraft = false}) async {
+    if (authenticatedUserId.isEmpty) {
+      state = state.copyWith(errorMessage: 'Authentication required to update dispute record.');
+      return null;
+    }
+
+    state = state.copyWith(isSubmitting: true, errorMessage: null);
+
+    final title = '${state.propertyType} in ${state.locality} (${state.disputeCategory})';
+
+    final updated = existing.copyWith(
+      title: title,
+      propertyType: state.propertyType,
+      state: state.state,
+      district: state.district,
+      taluk: state.taluk,
+      city: state.city,
+      locality: state.locality,
+      village: state.village.isNotEmpty ? state.village : null,
+      surveyCtsNumber: state.surveyNumber.isNotEmpty ? state.surveyNumber : null,
+      propertyNumber: state.propertyNumber.isNotEmpty ? state.propertyNumber : null,
+      plotFlatShopNumber: state.plotFlatShopNumber.isNotEmpty ? state.plotFlatShopNumber : null,
+      propertyArea: state.propertyArea,
+      areaUnit: state.areaUnit,
+      disputeCategory: state.disputeCategory,
+      disputeType: DisputeTypeExtension.fromString(state.disputeCategory),
+      factualSummary: state.factualSummary,
+      description: state.factualSummary,
+      claimedDisputeNature: state.claimedDisputeNature,
+      claimingPartyRole: state.claimingPartyRole,
+      respondingPartyRole: state.respondingPartyRole.isNotEmpty ? state.respondingPartyRole : null,
+      currentStage: state.currentStage,
+      disputeStartDate: state.disputeStartDate.isNotEmpty ? state.disputeStartDate : null,
+      caseNumber: state.caseNumber.isNotEmpty ? state.caseNumber : null,
+      courtAuthority: state.courtAuthorityName.isNotEmpty ? state.courtAuthorityName : null,
+      caseFilingDate: state.caseFilingDate.isNotEmpty ? state.caseFilingDate : null,
+      nextHearingDate: state.nextHearingDate.isNotEmpty ? state.nextHearingDate : null,
+      caseOrdersNotes: state.caseOrdersNotes.isNotEmpty ? state.caseOrdersNotes : null,
+      verificationStatus: asDraft ? DisputeVerificationStatus.draft : DisputeVerificationStatus.submitted,
+      lastUpdated: DateTime.now(),
+    );
+
+    final result = await _repository.updateDispute(
+      updated,
+      authenticatedUserId: authenticatedUserId,
+    );
+
+    return result.fold(
+      (failure) {
+        state = state.copyWith(isSubmitting: false, errorMessage: failure.message);
+        return null;
+      },
+      (saved) {
+        state = state.copyWith(isSubmitting: false, createdDisputeId: saved.id);
+        return saved;
       },
     );
   }

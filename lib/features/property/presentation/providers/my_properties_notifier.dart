@@ -22,6 +22,7 @@ class MyPropertiesState extends Equatable {
   final bool profileResolved;
   final bool remoteFetchSucceeded;
   final Set<String> remotePropertyIds;
+  final String? diagnosticReason;
 
   const MyPropertiesState({
     this.status = MyPropertiesStateStatus.initial,
@@ -32,6 +33,7 @@ class MyPropertiesState extends Equatable {
     this.profileResolved = false,
     this.remoteFetchSucceeded = false,
     this.remotePropertyIds = const {},
+    this.diagnosticReason,
   });
 
   List<PropertyEntity> get filteredProperties {
@@ -51,13 +53,24 @@ class MyPropertiesState extends Equatable {
     if (activeTab == 'Approved' || activeTab == 'APPROVED') {
       return allProperties.where((p) => p.status == ListingStatus.approved).toList();
     }
-    if (activeTab == 'Published' || activeTab == 'PUBLISHED') {
+    if (activeTab == 'Published' || activeTab == 'PUBLISHED' || activeTab == 'Active' || activeTab == 'ACTIVE') {
       return allProperties
-          .where((p) => p.status == ListingStatus.published || p.status == ListingStatus.active)
+          .where((p) =>
+              (p.status == ListingStatus.published ||
+                  p.status == ListingStatus.active ||
+                  p.status == ListingStatus.approved) &&
+              !p.isPaused &&
+              !p.isListingExpired)
           .toList();
     }
+    if (activeTab == 'Expired' || activeTab == 'EXPIRED') {
+      return allProperties.where((p) => p.isListingExpired).toList();
+    }
+    if (activeTab == 'Sold' || activeTab == 'SOLD') {
+      return allProperties.where((p) => p.status == ListingStatus.sold).toList();
+    }
     if (activeTab == 'Paused' || activeTab == 'PAUSED') {
-      return allProperties.where((p) => p.status == ListingStatus.paused).toList();
+      return allProperties.where((p) => p.isPaused || p.status == ListingStatus.paused).toList();
     }
     if (activeTab == 'Rejected' || activeTab == 'REJECTED') {
       return allProperties.where((p) => p.status == ListingStatus.rejected).toList();
@@ -71,6 +84,16 @@ class MyPropertiesState extends Equatable {
     return allProperties;
   }
 
+  int get totalCount => allProperties.length;
+  int get activePublishedCount => allProperties.where((p) =>
+      (p.status == ListingStatus.published || p.status == ListingStatus.active || p.status == ListingStatus.approved) && !p.isPaused && !p.isListingExpired).length;
+  int get expiredCount => allProperties.where((p) => p.isListingExpired).length;
+  int get pausedCount => allProperties.where((p) => p.isPaused || p.status == ListingStatus.paused).length;
+  int get pendingReviewCount => allProperties.where((p) =>
+      p.status == ListingStatus.submitted || p.status == ListingStatus.pendingVerification || p.status == ListingStatus.underReview).length;
+  int get draftCount => allProperties.where((p) => p.status == ListingStatus.draft).length;
+  int get soldCount => allProperties.where((p) => p.status == ListingStatus.sold).length;
+
   MyPropertiesState copyWith({
     MyPropertiesStateStatus? status,
     String? activeTab,
@@ -80,6 +103,7 @@ class MyPropertiesState extends Equatable {
     bool? profileResolved,
     bool? remoteFetchSucceeded,
     Set<String>? remotePropertyIds,
+    String? diagnosticReason,
   }) {
     return MyPropertiesState(
       status: status ?? this.status,
@@ -90,6 +114,7 @@ class MyPropertiesState extends Equatable {
       profileResolved: profileResolved ?? this.profileResolved,
       remoteFetchSucceeded: remoteFetchSucceeded ?? this.remoteFetchSucceeded,
       remotePropertyIds: remotePropertyIds ?? this.remotePropertyIds,
+      diagnosticReason: diagnosticReason ?? this.diagnosticReason,
     );
   }
 
@@ -103,6 +128,7 @@ class MyPropertiesState extends Equatable {
         profileResolved,
         remoteFetchSucceeded,
         remotePropertyIds,
+        diagnosticReason,
       ];
 }
 
@@ -119,6 +145,7 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
     final profRes = PropertyRemoteDataSourceImpl.lastFetchProfileResolved;
     final remoteSucc = PropertyRemoteDataSourceImpl.lastRemoteFetchSucceeded;
     final remoteIds = PropertyRemoteDataSourceImpl.lastRemotePropertyIds;
+    final diagReason = PropertyRemoteDataSourceImpl.lastFetchDiagnosticReason;
 
     result.fold(
       (failure) {
@@ -130,6 +157,7 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
           profileResolved: profRes,
           remoteFetchSucceeded: remoteSucc,
           remotePropertyIds: remoteIds,
+          diagnosticReason: diagReason ?? failure.message,
         );
       },
       (list) {
@@ -141,6 +169,7 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
           profileResolved: profRes,
           remoteFetchSucceeded: remoteSucc,
           remotePropertyIds: remoteIds,
+          diagnosticReason: diagReason,
         );
       },
     );
@@ -157,11 +186,22 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
     required String propertyId,
     UserRole? userRole,
   }) async {
-    return updatePropertyStatus(
-      authenticatedUserId: authenticatedUserId,
+    final result = await _repository.setPropertyPaused(
       propertyId: propertyId,
-      targetStatus: ListingStatus.paused,
+      isPaused: true,
+      authenticatedUserId: authenticatedUserId,
       userRole: userRole,
+    );
+
+    return result.fold(
+      (failure) {
+        state = state.copyWith(errorMessage: failure.message);
+        return false;
+      },
+      (saved) async {
+        await fetchMyProperties(authenticatedUserId);
+        return true;
+      },
     );
   }
 
@@ -170,11 +210,22 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
     required String propertyId,
     UserRole? userRole,
   }) async {
-    return updatePropertyStatus(
-      authenticatedUserId: authenticatedUserId,
+    final result = await _repository.setPropertyPaused(
       propertyId: propertyId,
-      targetStatus: ListingStatus.published,
+      isPaused: false,
+      authenticatedUserId: authenticatedUserId,
       userRole: userRole,
+    );
+
+    return result.fold(
+      (failure) {
+        state = state.copyWith(errorMessage: failure.message);
+        return false;
+      },
+      (saved) async {
+        await fetchMyProperties(authenticatedUserId);
+        return true;
+      },
     );
   }
 
@@ -189,7 +240,7 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
         orElse: () => throw const AccessDeniedException('Property not found.'),
       );
 
-      PropertySecurityGuard.verifyPropertyOwnership(
+      await PropertySecurityGuard.verifyPropertyOwnershipAsync(
         authenticatedUserId: authenticatedUserId,
         ownerId: existing.ownerId,
         userRole: userRole,
@@ -242,11 +293,11 @@ class MyPropertiesNotifier extends StateNotifier<MyPropertiesState> {
     try {
       final existing = state.allProperties.firstWhere(
         (p) => p.id == propertyId,
-        orElse: () => throw Exception('Property not found.'),
+        orElse: () => throw const AccessDeniedException('Property not found.'),
       );
 
-      // Ownership Security Check
-      PropertySecurityGuard.verifyPropertyOwnership(
+      // Async Ownership Security Check
+      await PropertySecurityGuard.verifyPropertyOwnershipAsync(
         authenticatedUserId: authenticatedUserId,
         ownerId: existing.ownerId,
         userRole: userRole,

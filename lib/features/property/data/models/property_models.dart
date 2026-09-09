@@ -92,7 +92,9 @@ class PropertyMediaModel extends PropertyMediaEntity {
         (e) => e.name == json['processing_status'],
         orElse: () => MediaProcessingStatus.ready,
       ),
-      uploadedAt: json['uploaded_at'] != null ? DateTime.parse(json['uploaded_at'] as String) : DateTime.now(),
+      uploadedAt: json['uploaded_at'] != null
+          ? DateTime.parse(json['uploaded_at'] as String)
+          : (json['created_at'] != null ? DateTime.parse(json['created_at'] as String) : DateTime.now()),
     );
   }
 
@@ -143,6 +145,14 @@ class PropertyModel extends PropertyEntity {
     super.longitude,
     super.viewsCount = 0,
     super.features = const {},
+    super.isPaused = false,
+    super.isFeatured = false,
+    super.listingAccessType = 'free_residential',
+    super.listingAccessStartedAt,
+    super.freeListingExpiresAt,
+    super.listingExpiresAt,
+    super.activePlanId,
+    super.isGrandfathered = false,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -153,7 +163,6 @@ class PropertyModel extends PropertyEntity {
       ownerId: json['owner_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      // Use safe fromDb helpers that handle both camelCase and snake_case DB values
       category: PropertyCategoryX.fromDb(json['category']),
       type: PropertySubtypeX.fromDb(json['type']),
       status: ListingStatusX.fromDb(json['status']),
@@ -162,12 +171,9 @@ class PropertyModel extends PropertyEntity {
       verificationNotes: json['verification_notes'] as String?,
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       isNegotiable: json['is_negotiable'] as bool? ?? true,
-      specifications: json['specifications'] != null && json['specifications'] is Map<String, dynamic>
-          ? PropertySpecificationsModel.fromJson(
-              json['specifications'] as Map<String, dynamic>)
-          : PropertySpecificationsModel.fromJson(json),
-      mediaList: (json['property_media'] as List? ?? json['media_list'] as List?)
-              ?.map((e) => PropertyMediaModel.fromJson(e as Map<String, dynamic>))
+      specifications: PropertySpecificationsModel.fromJson(json),
+      mediaList: (json['property_media'] as List<dynamic>?)
+              ?.map((m) => PropertyMediaModel.fromJson(m as Map<String, dynamic>))
               .toList() ??
           const [],
       state: json['state'] as String? ?? 'Karnataka',
@@ -181,6 +187,20 @@ class PropertyModel extends PropertyEntity {
       longitude: (json['longitude'] as num?)?.toDouble(),
       viewsCount: json['views_count'] as int? ?? 0,
       features: json['features'] as Map<String, dynamic>? ?? const {},
+      isPaused: json['is_paused'] as bool? ?? false,
+      isFeatured: json['is_featured'] as bool? ?? false,
+      listingAccessType: json['listing_access_type'] as String? ?? 'free_residential',
+      listingAccessStartedAt: json['listing_access_started_at'] != null
+          ? DateTime.tryParse(json['listing_access_started_at'] as String)
+          : null,
+      freeListingExpiresAt: json['free_listing_expires_at'] != null
+          ? DateTime.tryParse(json['free_listing_expires_at'] as String)
+          : null,
+      listingExpiresAt: json['listing_expires_at'] != null
+          ? DateTime.tryParse(json['listing_expires_at'] as String)
+          : null,
+      activePlanId: json['active_plan_id'] as String?,
+      isGrandfathered: json['is_grandfathered'] as bool? ?? false,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : DateTime.now(),
@@ -190,7 +210,7 @@ class PropertyModel extends PropertyEntity {
     );
   }
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toDatabaseJson() => {
         'id': id,
         'owner_id': ownerId,
         'title': title,
@@ -223,9 +243,50 @@ class PropertyModel extends PropertyEntity {
         'longitude': longitude,
         'views_count': viewsCount,
         'features': features,
+        'is_paused': isPaused,
+        'is_featured': isFeatured,
+        'listing_access_type': listingAccessType,
+        if (listingAccessStartedAt != null)
+          'listing_access_started_at': listingAccessStartedAt!.toIso8601String(),
+        if (freeListingExpiresAt != null)
+          'free_listing_expires_at': freeListingExpiresAt!.toIso8601String(),
+        if (listingExpiresAt != null)
+          'listing_expires_at': listingExpiresAt!.toIso8601String(),
+        if (activePlanId != null)
+          'active_plan_id': activePlanId,
+        'is_grandfathered': isGrandfathered,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
+
+  Map<String, dynamic> toJson() {
+    final map = toDatabaseJson();
+    if (mediaList.isNotEmpty) {
+      map['property_media'] = mediaList
+          .map((m) => m is PropertyMediaModel
+              ? m.toJson()
+              : PropertyMediaModel(
+                  id: m.id,
+                  propertyId: m.propertyId,
+                  mediaUrl: m.mediaUrl,
+                  thumbnailUrl: m.thumbnailUrl,
+                  mediumUrl: m.mediumUrl,
+                  fullUrl: m.fullUrl,
+                  type: m.type,
+                  displayOrder: m.displayOrder,
+                  isCover: m.isCover,
+                  caption: m.caption,
+                  width: m.width,
+                  height: m.height,
+                  fileSize: m.fileSize,
+                  mimeType: m.mimeType,
+                  processingStatus: m.processingStatus,
+                  uploadedAt: m.uploadedAt,
+                ).toJson())
+          .toList();
+    }
+    return map;
+  }
 
 
   @override
@@ -255,6 +316,14 @@ class PropertyModel extends PropertyEntity {
     double? longitude,
     int? viewsCount,
     Map<String, dynamic>? features,
+    bool? isPaused,
+    bool? isFeatured,
+    String? listingAccessType,
+    DateTime? listingAccessStartedAt,
+    DateTime? freeListingExpiresAt,
+    DateTime? listingExpiresAt,
+    String? activePlanId,
+    bool? isGrandfathered,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -284,6 +353,14 @@ class PropertyModel extends PropertyEntity {
       longitude: longitude ?? this.longitude,
       viewsCount: viewsCount ?? this.viewsCount,
       features: features ?? this.features,
+      isPaused: isPaused ?? this.isPaused,
+      isFeatured: isFeatured ?? this.isFeatured,
+      listingAccessType: listingAccessType ?? this.listingAccessType,
+      listingAccessStartedAt: listingAccessStartedAt ?? this.listingAccessStartedAt,
+      freeListingExpiresAt: freeListingExpiresAt ?? this.freeListingExpiresAt,
+      listingExpiresAt: listingExpiresAt ?? this.listingExpiresAt,
+      activePlanId: activePlanId ?? this.activePlanId,
+      isGrandfathered: isGrandfathered ?? this.isGrandfathered,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

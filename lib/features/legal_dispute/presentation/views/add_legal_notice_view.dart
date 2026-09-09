@@ -11,7 +11,14 @@ import '../providers/legal_notice_providers.dart';
 
 /// Single-Column Mobile-First Legal Notice Listing Wizard per CTO Master Directive
 class AddLegalNoticeView extends ConsumerStatefulWidget {
-  const AddLegalNoticeView({super.key});
+  final String? editNoticeId;
+  final TransactionLegalNoticeEntity? editNotice;
+
+  const AddLegalNoticeView({
+    super.key,
+    this.editNoticeId,
+    this.editNotice,
+  });
 
   @override
   ConsumerState<AddLegalNoticeView> createState() => _AddLegalNoticeViewState();
@@ -108,6 +115,59 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
   void initState() {
     super.initState();
     _checkAuthGate();
+    if (widget.editNotice != null) {
+      _initFromNotice(widget.editNotice!);
+    } else if (widget.editNoticeId != null && widget.editNoticeId!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadNoticeForEdit(widget.editNoticeId!));
+    }
+  }
+
+  void _initFromNotice(TransactionLegalNoticeEntity n) {
+    _selectedNoticeType = n.noticeType;
+    _linkedPropertyIdController.text = n.propertyId;
+    _titleController.text = n.title;
+    _category = n.category;
+    _cityController.text = n.city;
+    _localityController.text = n.locality;
+    _surveyNumberController.text = n.surveyCtsNumber ?? '';
+    _buyerNameController.text = n.buyerName;
+    _buyerAdvocateController.text = n.buyerAdvocate ?? '';
+    _sellerNameController.text = n.sellerName;
+    if (_transactionTypesList.contains(n.transactionType)) {
+      _transactionType = n.transactionType;
+    }
+    _agreedValueController.text = n.agreedValue ?? '';
+    _publicSummaryController.text = n.publicNoticeSummary ?? '';
+    _noticeFullTextController.text = n.noticeFullText ?? '';
+    if (n.publicationInfo != null) {
+      _newspaperNameController.text = n.publicationInfo!.newspaperName ?? '';
+      _editionController.text = n.publicationInfo!.edition ?? 'Belagavi Edition';
+      _pageNumberController.text = n.publicationInfo!.pageNumber ?? '';
+      _advocateFirmController.text = n.publicationInfo!.advocateFirm ?? '';
+    }
+    _contactNameController.text = n.contactName;
+    _contactPhoneController.text = n.contactPhone;
+    if (_contactRolesList.contains(n.contactRole)) {
+      _contactRole = n.contactRole;
+    }
+    _propertyPhotos.clear();
+    _propertyPhotos.addAll(n.photoUrls);
+    _attachedDocuments.clear();
+    _attachedDocuments.addAll(n.documentUrls);
+  }
+
+  Future<void> _loadNoticeForEdit(String id) async {
+    final repo = ref.read(legalNoticeRepositoryProvider);
+    final result = await repo.getLegalNoticeById(id, requestingUserId: '');
+    result.fold(
+      (_) {},
+      (n) {
+        if (n != null && mounted) {
+          _initFromNotice(n);
+          setState(() {});
+        }
+      },
+    );
   }
 
   void _checkAuthGate() {
@@ -202,13 +262,14 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to pick photo: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 
@@ -225,13 +286,14 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to attach document: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
     }
   }
 
@@ -269,11 +331,17 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
         AuthSessionStorageHelper.getUserUid() ??
         'usr_${DateTime.now().millisecondsSinceEpoch}';
 
+    final isEditing = widget.editNotice != null ||
+        (widget.editNoticeId != null && widget.editNoticeId!.isNotEmpty);
+    final targetId = widget.editNotice?.id ?? widget.editNoticeId ?? 'not_${DateTime.now().millisecondsSinceEpoch}';
+
     final noticeEntity = TransactionLegalNoticeEntity(
-      id: 'not_${DateTime.now().millisecondsSinceEpoch}',
+      id: targetId,
       propertyId: _linkedPropertyIdController.text.trim().isNotEmpty
           ? _linkedPropertyIdController.text.trim()
-          : 'prop_not_${DateTime.now().millisecondsSinceEpoch}',
+          : (widget.editNotice?.propertyId.isNotEmpty == true
+              ? widget.editNotice!.propertyId
+              : 'prop_not_${DateTime.now().millisecondsSinceEpoch}'),
       title: _titleController.text.trim().isNotEmpty
           ? _titleController.text.trim()
           : 'Legal Notice Record',
@@ -318,7 +386,7 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
                   ? _advocateFirmController.text.trim()
                   : null,
             )
-          : null,
+          : widget.editNotice?.publicationInfo,
       photoUrls: _propertyPhotos,
       documentUrls: _attachedDocuments,
       photoLabels: _photoLabels,
@@ -328,37 +396,46 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
       verificationStatus: isDraft
           ? LegalNoticeStatus.draft
           : LegalNoticeStatus.underReview,
-      recordedBy: currentUserId,
-      createdAt: DateTime.now(),
+      recordedBy: widget.editNotice?.recordedBy.isNotEmpty == true
+          ? widget.editNotice!.recordedBy
+          : currentUserId,
+      createdAt: widget.editNotice?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
 
     final repo = ref.read(legalNoticeRepositoryProvider);
-    final result = await repo.createLegalNotice(
-      noticeEntity,
-      authenticatedUserId: currentUserId,
-    );
+    final result = isEditing
+        ? await repo.updateLegalNotice(
+            noticeEntity,
+            authenticatedUserId: currentUserId,
+          )
+        : await repo.createLegalNotice(
+            noticeEntity,
+            authenticatedUserId: currentUserId,
+          );
 
     result.fold(
       (failure) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(failure.message),
               backgroundColor: Colors.red,
             ),
           );
+        }
       },
-      (created) {
+      (saved) {
         ref.read(legalNoticesNotifierProvider.notifier).loadLegalNotices();
-        if (mounted)
+        if (mounted) {
           setState(() {
             if (isDraft) {
-              _isDraftSaved = true;
+               _isDraftSaved = true;
             } else {
               _isSubmitted = true;
             }
           });
+        }
       },
     );
   }
@@ -366,10 +443,11 @@ class _AddLegalNoticeViewState extends ConsumerState<AddLegalNoticeView> {
   void _onBack() {
     if (_currentStep > 0) {
       setState(() => _currentStep--);
-    } else if (context.canPop())
+    } else if (context.canPop()) {
       context.pop();
-    else
+    } else {
       context.go('/legal-notices');
+    }
   }
 
   @override

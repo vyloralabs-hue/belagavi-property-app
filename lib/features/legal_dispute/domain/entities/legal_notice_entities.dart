@@ -347,6 +347,9 @@ class TransactionLegalNoticeEntity extends Equatable {
   final String recordedBy;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? publishedAt;
+  final DateTime? publicUntil;
+  final DateTime? expiredAt;
 
   const TransactionLegalNoticeEntity({
     this.id = '',
@@ -408,10 +411,37 @@ class TransactionLegalNoticeEntity extends Equatable {
     this.recordedBy = 'User',
     this.createdAt,
     this.updatedAt,
+    this.publishedAt,
+    this.publicUntil,
+    this.expiredAt,
   });
 
   DateTime get safeCreatedAt => createdAt ?? DateTime.now();
   DateTime get safeUpdatedAt => updatedAt ?? DateTime.now();
+
+  /// Whether the notice is currently active in the 10-day public visibility window
+  bool get isPubliclyActive {
+    if (verificationStatus != LegalNoticeStatus.published) return false;
+    final now = DateTime.now();
+    if (publishedAt != null && publishedAt!.isAfter(now)) return false;
+    if (publicUntil != null && !publicUntil!.isAfter(now)) return false;
+    return true;
+  }
+
+  /// Whether the notice has expired from public view
+  bool get isExpiredFromPublicView {
+    if (expiredAt != null) return true;
+    if (publicUntil != null && !publicUntil!.isAfter(DateTime.now())) return true;
+    return false;
+  }
+
+  /// Remaining days in public visibility window (0 if expired)
+  int get remainingPublicDays {
+    if (publicUntil == null) return 0;
+    final diff = publicUntil!.difference(DateTime.now());
+    if (diff.isNegative) return 0;
+    return (diff.inHours / 24).ceil();
+  }
 
   TransactionLegalNoticeEntity copyWith({
     String? id,
@@ -473,6 +503,9 @@ class TransactionLegalNoticeEntity extends Equatable {
     String? recordedBy,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? publishedAt,
+    DateTime? publicUntil,
+    DateTime? expiredAt,
   }) {
     return TransactionLegalNoticeEntity(
       id: id ?? this.id,
@@ -534,7 +567,81 @@ class TransactionLegalNoticeEntity extends Equatable {
       recordedBy: recordedBy ?? this.recordedBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      publishedAt: publishedAt ?? this.publishedAt,
+      publicUntil: publicUntil ?? this.publicUntil,
+      expiredAt: expiredAt ?? this.expiredAt,
     );
+  }
+
+  Map<String, dynamic> toSupabaseMap() {
+    // Exact column mapping for public.legal_notices
+    String pubType = 'Individual';
+    if (contactRole.toLowerCase().contains('advocate')) {
+      pubType = 'Advocate';
+    } else if (contactRole.toLowerCase().contains('buyer') || contactRole.toLowerCase().contains('purchaser')) {
+      pubType = 'Purchaser';
+    } else if (contactRole.toLowerCase().contains('seller') || contactRole.toLowerCase().contains('owner')) {
+      pubType = 'Landowner';
+    }
+
+    String pubName = buyerName.isNotEmpty ? buyerName : (sellerName.isNotEmpty ? sellerName : contactName);
+    if (pubName.isEmpty) pubName = 'Authorized Publisher';
+
+    String pubSummary = publicNoticeSummary ?? title;
+    if (pubSummary.isEmpty) pubSummary = title;
+
+    DateTime nDate = DateTime.now();
+    if (noticeDate != null) {
+      nDate = DateTime.tryParse(noticeDate!) ?? DateTime.now();
+    }
+
+    return {
+      if (id.isNotEmpty && id.contains('-')) 'id': id,
+      if (propertyId.isNotEmpty && propertyId.contains('-')) 'property_id': propertyId,
+      'publisher_id': recordedBy,
+      'publisher_type': pubType,
+      'publisher_name': pubName,
+      if (contactPhone.isNotEmpty) 'publisher_contact_phone': contactPhone,
+      if (contactEmail != null && contactEmail!.isNotEmpty) 'publisher_contact_email': contactEmail,
+      if (fullAddress != null) 'publisher_address': fullAddress,
+      if (buyerAdvocate != null || publicationInfo?.advocateFirm != null)
+        'advocate_firm_details': buyerAdvocate ?? publicationInfo?.advocateFirm,
+      'notice_title': title.isNotEmpty ? title : 'Property Legal Notice',
+      'notice_type': noticeType.name,
+      'notice_date': nDate.toIso8601String().split('T').first,
+      if (effectiveDate != null)
+        'effective_date': (DateTime.tryParse(effectiveDate!) ?? nDate).toIso8601String().split('T').first,
+      if (responseDeadline != null)
+        'objection_deadline': (DateTime.tryParse(responseDeadline!) ?? nDate.add(const Duration(days: 14))).toIso8601String().split('T').first,
+      if (referenceNumber != null) 'reference_number': referenceNumber,
+      'state': state.isNotEmpty ? state : 'Karnataka',
+      'district': (district != null && district!.isNotEmpty) ? district : 'Belagavi',
+      'taluk': (villageTaluk != null && villageTaluk!.isNotEmpty) ? villageTaluk : 'Belagavi',
+      'city': city.isNotEmpty ? city : 'Belagavi',
+      'locality': locality.isNotEmpty ? locality : 'Belagavi',
+      if (villageTaluk != null) 'village': villageTaluk,
+      if (surveyCtsNumber != null) 'survey_property_number': surveyCtsNumber,
+      if (plotNumber != null || flatUnitNumber != null)
+        'plot_flat_shop_number': plotNumber ?? flatUnitNumber,
+      if (landArea != null) 'property_area': double.tryParse(landArea!) ?? 0.0,
+      'area_unit': areaUnit,
+      if (khataNumber != null) 'registration_details': khataNumber,
+      'short_summary': pubSummary,
+      if (noticeFullText != null) 'full_notice_text': noticeFullText,
+      if (contactPhone.isNotEmpty) 'response_contact_channel': contactPhone,
+      'status': verificationStatus == LegalNoticeStatus.draft
+          ? 'draft'
+          : (verificationStatus == LegalNoticeStatus.published ? 'published' : 'under_review'),
+      'is_identity_verified': false,
+      'has_documents': documentUrls.isNotEmpty,
+      'badge_labels': ['DOCUMENT UPLOADED'],
+      'views_count': 0,
+      if (publishedAt != null) 'published_at': publishedAt!.toIso8601String(),
+      if (publicUntil != null) 'public_until': publicUntil!.toIso8601String(),
+      if (expiredAt != null) 'expired_at': expiredAt!.toIso8601String(),
+      'created_at': safeCreatedAt.toIso8601String(),
+      'updated_at': safeUpdatedAt.toIso8601String(),
+    };
   }
 
   Map<String, dynamic> toMap() {
@@ -596,6 +703,9 @@ class TransactionLegalNoticeEntity extends Equatable {
       'canAddDocumentsLater': canAddDocumentsLater,
       'verificationStatus': verificationStatus.name,
       'recordedBy': recordedBy,
+      if (publishedAt != null) 'publishedAt': publishedAt!.toIso8601String(),
+      if (publicUntil != null) 'publicUntil': publicUntil!.toIso8601String(),
+      if (expiredAt != null) 'expiredAt': expiredAt!.toIso8601String(),
       'createdAt': safeCreatedAt.toIso8601String(),
       'updatedAt': safeUpdatedAt.toIso8601String(),
     };
@@ -607,7 +717,7 @@ class TransactionLegalNoticeEntity extends Equatable {
     return TransactionLegalNoticeEntity(
       id: recordId,
       propertyId: propId,
-      title: (map['title'] as String?) ?? 'Purchase / Sale Legal Notice',
+      title: (map['notice_title'] as String?) ?? (map['title'] as String?) ?? 'Property Legal Notice',
       category: (map['category'] as String?) ?? 'Residential',
       propertyType: (map['propertyType'] as String?) ?? (map['property_type'] as String?) ?? 'Apartment',
       country: (map['country'] as String?) ?? 'India',
@@ -616,71 +726,92 @@ class TransactionLegalNoticeEntity extends Equatable {
       city: (map['city'] as String?) ?? 'Belagavi',
       locality: (map['locality'] as String?) ?? 'Belagavi',
       postalCode: (map['postalCode'] as String?) ?? (map['postal_code'] as String?),
-      fullAddress: (map['fullAddress'] as String?) ?? (map['full_address'] as String?),
+      fullAddress: (map['publisher_address'] as String?) ?? (map['fullAddress'] as String?) ?? (map['full_address'] as String?),
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
-      villageTaluk: (map['villageTaluk'] as String?) ?? (map['village_taluk'] as String?),
-      surveyCtsNumber: (map['surveyCtsNumber'] as String?) ?? (map['survey_cts_number'] as String?),
-      khataNumber: (map['khataNumber'] as String?) ?? (map['khata_number'] as String?),
-      plotNumber: (map['plotNumber'] as String?) ?? (map['plot_number'] as String?),
+      villageTaluk: (map['village'] as String?) ?? (map['taluk'] as String?) ?? (map['villageTaluk'] as String?) ?? (map['village_taluk'] as String?),
+      surveyCtsNumber: (map['survey_property_number'] as String?) ?? (map['surveyCtsNumber'] as String?) ?? (map['survey_cts_number'] as String?),
+      khataNumber: (map['registration_details'] as String?) ?? (map['khataNumber'] as String?) ?? (map['khata_number'] as String?),
+      plotNumber: (map['plot_flat_shop_number'] as String?) ?? (map['plotNumber'] as String?) ?? (map['plot_number'] as String?),
       flatUnitNumber: (map['flatUnitNumber'] as String?) ?? (map['flat_unit_number'] as String?),
       buildingProjectName: (map['buildingProjectName'] as String?) ?? (map['building_project_name'] as String?),
-      landArea: (map['landArea'] as String?) ?? (map['land_area'] as String?),
-      areaUnit: (map['areaUnit'] as String?) ?? (map['area_unit'] as String?) ?? 'sq.ft',
-      buyerName: (map['buyerName'] as String?) ?? (map['buyer_name'] as String?) ?? '',
-      buyerAddress: (map['buyerAddress'] as String?) ?? (map['buyer_address'] as String?),
-      buyerAdvocate: (map['buyerAdvocate'] as String?) ?? (map['buyer_advocate'] as String?),
+      landArea: map['property_area'] != null ? map['property_area'].toString() : (map['landArea'] as String?) ?? (map['land_area'] as String?),
+      areaUnit: (map['area_unit'] as String?) ?? (map['areaUnit'] as String?) ?? 'sq.ft',
+      buyerName: (map['publisher_name'] as String?) ?? (map['buyerName'] as String?) ?? (map['buyer_name'] as String?) ?? '',
+      buyerAddress: (map['publisher_address'] as String?) ?? (map['buyerAddress'] as String?) ?? (map['buyer_address'] as String?),
+      buyerAdvocate: (map['advocate_firm_details'] as String?) ?? (map['buyerAdvocate'] as String?) ?? (map['buyer_advocate'] as String?),
       sellerName: (map['sellerName'] as String?) ?? (map['seller_name'] as String?) ?? '',
       sellerAddress: (map['sellerAddress'] as String?) ?? (map['seller_address'] as String?),
       structuredParties: (map['structuredParties'] as List?)
               ?.map((p) => NoticePartyEntity.fromMap(p as Map<String, dynamic>))
               .toList() ??
           const [],
-      contactName: (map['contactName'] as String?) ?? (map['contact_name'] as String?) ?? 'Authorized Contact',
-      contactPhone: (map['contactPhone'] as String?) ?? (map['contact_phone'] as String?) ?? '',
-      contactEmail: (map['contactEmail'] as String?) ?? (map['contact_email'] as String?),
-      contactRole: (map['contactRole'] as String?) ?? (map['contact_role'] as String?) ?? 'Buyer / Purchaser',
+      contactName: (map['publisher_name'] as String?) ?? (map['contactName'] as String?) ?? (map['contact_name'] as String?) ?? 'Authorized Contact',
+      contactPhone: (map['publisher_contact_phone'] as String?) ?? (map['response_contact_channel'] as String?) ?? (map['contactPhone'] as String?) ?? (map['contact_phone'] as String?) ?? '',
+      contactEmail: (map['publisher_contact_email'] as String?) ?? (map['contactEmail'] as String?) ?? (map['contact_email'] as String?),
+      contactRole: (map['publisher_type'] as String?) ?? (map['contactRole'] as String?) ?? (map['contact_role'] as String?) ?? 'Buyer / Purchaser',
       transactionType: (map['transactionType'] as String?) ?? (map['transaction_type'] as String?) ?? 'Purchase',
       agreedValue: (map['agreedValue'] as String?) ?? (map['agreed_value'] as String?),
       agreementDate: (map['agreementDate'] as String?) ?? (map['agreement_date'] as String?),
-      executionDate: (map['executionDate'] as String?) ?? (map['execution_date'] as String?),
+      executionDate: (map['effective_date'] as String?) ?? (map['executionDate'] as String?) ?? (map['execution_date'] as String?),
       transactionStatus: (map['transactionStatus'] as String?) ?? (map['transaction_status'] as String?) ?? 'Under Negotiation / Proposed',
-      transactionDescription: (map['transactionDescription'] as String?) ?? (map['transaction_description'] as String?),
-      noticeType: LegalNoticeTypeExtension.fromString((map['noticeType'] as String?) ?? (map['notice_type'] as String?)),
+      transactionDescription: (map['full_notice_text'] as String?) ?? (map['transactionDescription'] as String?) ?? (map['transaction_description'] as String?),
+      noticeType: LegalNoticeTypeExtension.fromString((map['notice_type'] as String?) ?? (map['noticeType'] as String?)),
       issuingAuthority: (map['issuingAuthority'] as String?) ?? (map['issuing_authority'] as String?),
-      referenceNumber: (map['referenceNumber'] as String?) ?? (map['reference_number'] as String?),
-      noticeDate: (map['noticeDate'] as String?) ?? (map['notice_date'] as String?),
-      effectiveDate: (map['effectiveDate'] as String?) ?? (map['effective_date'] as String?),
-      responseDeadline: (map['responseDeadline'] as String?) ?? (map['response_deadline'] as String?),
+      referenceNumber: (map['reference_number'] as String?) ?? (map['referenceNumber'] as String?),
+      noticeDate: (map['notice_date'] as String?) ?? (map['noticeDate'] as String?),
+      effectiveDate: (map['effective_date'] as String?) ?? (map['effectiveDate'] as String?),
+      responseDeadline: (map['objection_deadline'] as String?) ?? (map['responseDeadline'] as String?) ?? (map['response_deadline'] as String?),
       objectionPeriod: (map['objectionPeriod'] as String?) ?? (map['objection_period'] as String?),
-      publicNoticeSummary: (map['publicNoticeSummary'] as String?) ?? (map['public_notice_summary'] as String?),
-      noticeFullText: (map['noticeFullText'] as String?) ?? (map['notice_full_text'] as String?),
+      publicNoticeSummary: (map['short_summary'] as String?) ?? (map['publicNoticeSummary'] as String?) ?? (map['public_notice_summary'] as String?),
+      noticeFullText: (map['full_notice_text'] as String?) ?? (map['noticeFullText'] as String?) ?? (map['notice_full_text'] as String?),
       dueDiligenceNotes: (map['dueDiligenceNotes'] as String?) ?? (map['due_diligence_notes'] as String?),
       publicationInfo: map['publicationInfo'] != null
           ? NoticePublicationEntity.fromMap(map['publicationInfo'] as Map<String, dynamic>)
-          : null,
+          : (map['advocate_firm_details'] != null
+              ? NoticePublicationEntity(advocateFirm: map['advocate_firm_details'] as String?)
+              : null),
       photoUrls: (map['photoUrls'] as List?)?.map((e) => e.toString()).toList() ??
           (map['photo_urls'] as List?)?.map((e) => e.toString()).toList() ??
           const [],
-      documentUrls: (map['documentUrls'] as List?)?.map((e) => e.toString()).toList() ??
+      documentUrls: (map['legal_notice_documents'] as List?)
+              ?.map((d) => (d['public_url'] ?? d['storage_path'] ?? '').toString())
+              .where((url) => url.isNotEmpty)
+              .toList() ??
+          (map['documentUrls'] as List?)?.map((e) => e.toString()).toList() ??
           (map['document_urls'] as List?)?.map((e) => e.toString()).toList() ??
           const [],
       photoLabels: (map['photoLabels'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       documentLabels: (map['documentLabels'] as List?)?.map((e) => e.toString()).toList() ?? const [],
       isDocumentPrivate: (map['isDocumentPrivate'] as bool?) ?? (map['is_document_private'] as bool?) ?? true,
       canAddDocumentsLater: (map['canAddDocumentsLater'] as bool?) ?? (map['can_add_documents_later'] as bool?) ?? true,
-      verificationStatus: LegalNoticeStatusExtension.fromString((map['verificationStatus'] as String?) ?? (map['verification_status'] as String?)),
-      recordedBy: (map['recordedBy'] as String?) ?? (map['recorded_by'] as String?) ?? 'Platform User',
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
-          : map['created_at'] != null
-              ? DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now()
+      verificationStatus: LegalNoticeStatusExtension.fromString((map['status'] as String?) ?? (map['verificationStatus'] as String?) ?? (map['verification_status'] as String?)),
+      recordedBy: (map['publisher_id'] as String?) ?? (map['recordedBy'] as String?) ?? (map['recorded_by'] as String?) ?? 'Platform User',
+      createdAt: map['created_at'] != null
+          ? DateTime.tryParse(map['created_at'].toString()) ?? DateTime.now()
+          : map['createdAt'] != null
+              ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
               : DateTime.now(),
-      updatedAt: map['updatedAt'] != null
-          ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
-          : map['updated_at'] != null
-              ? DateTime.tryParse(map['updated_at'].toString()) ?? DateTime.now()
+      updatedAt: map['updated_at'] != null
+          ? DateTime.tryParse(map['updated_at'].toString()) ?? DateTime.now()
+          : map['updatedAt'] != null
+              ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
               : DateTime.now(),
+      publishedAt: map['published_at'] != null
+          ? DateTime.tryParse(map['published_at'].toString())
+          : map['publishedAt'] != null
+              ? DateTime.tryParse(map['publishedAt'].toString())
+              : null,
+      publicUntil: map['public_until'] != null
+          ? DateTime.tryParse(map['public_until'].toString())
+          : map['publicUntil'] != null
+              ? DateTime.tryParse(map['publicUntil'].toString())
+              : null,
+      expiredAt: map['expired_at'] != null
+          ? DateTime.tryParse(map['expired_at'].toString())
+          : map['expiredAt'] != null
+              ? DateTime.tryParse(map['expiredAt'].toString())
+              : null,
     );
   }
 
@@ -745,6 +876,9 @@ class TransactionLegalNoticeEntity extends Equatable {
         recordedBy,
         createdAt,
         updatedAt,
+        publishedAt,
+        publicUntil,
+        expiredAt,
       ];
 }
 

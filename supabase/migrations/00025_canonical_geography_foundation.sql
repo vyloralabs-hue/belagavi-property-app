@@ -1,7 +1,10 @@
 -- =============================================================================
--- BELAGAVI PROPERTY: PHASE B CANONICAL GEOGRAPHY FOUNDATION (ADDITIVE MIGRATION)
+-- BELAGAVI PROPERTY: PHASE B CANONICAL GEOGRAPHY FOUNDATION (FAMILY B - SUPERSEDED)
 -- Version: 1.25.0
--- Status: PREPARED ADDITIVE FOUNDATION (DO NOT APPLY AUTOMATICALLY)
+-- Status: SUPERSEDED / DO NOT DEPLOY
+-- NOTE: Incompatible Family B schema (geo_admin_level_1/2). Superseded by
+--       00027_canonical_geography_family_a.sql which matches the active
+--       Flutter domain and data models (countries, states, districts, taluks, cities).
 -- =============================================================================
 
 -- 1. Master Countries Table

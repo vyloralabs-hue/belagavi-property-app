@@ -36,8 +36,8 @@ android {
         applicationId = "com.belagavi.belagavi_property"
         minSdk = 24
         targetSdk = 36
-        versionCode = 50
-        versionName = "1.0.50"
+        versionCode = vCode
+        versionName = vName
     }
 
     signingConfigs {
@@ -88,8 +88,8 @@ android {
         create("prod") {
             dimension = "env"
             isDefault = true
-            versionCode = 50
-            versionName = "1.0.50"
+            versionCode = vCode
+            versionName = vName
         }
     }
 }

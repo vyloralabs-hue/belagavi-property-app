@@ -10,6 +10,11 @@ enum NotificationType {
   newSavedSearchMatch,
   priceDropMatch,
   newChatMessage,
+  propertyMatch,
+  propertyWatch,
+  surveyActivity,
+  legalNoticeAlert,
+  disputeActivity,
   system,
 }
 
@@ -24,6 +29,11 @@ extension NotificationTypeExtension on NotificationType {
         NotificationType.newSavedSearchMatch => 'New Property Match',
         NotificationType.priceDropMatch => 'Price Drop Alert',
         NotificationType.newChatMessage => 'New Chat Message',
+        NotificationType.propertyMatch => 'Property Match Alert',
+        NotificationType.propertyWatch => 'Monitored Property Update',
+        NotificationType.surveyActivity => 'Survey Activity Observed',
+        NotificationType.legalNoticeAlert => 'Legal Notice Alert',
+        NotificationType.disputeActivity => 'Dispute Activity Observed',
         NotificationType.system => 'System Alert',
       };
 
@@ -44,6 +54,11 @@ extension NotificationTypeExtension on NotificationType {
         if (normalized == 'NEW_SAVED_SEARCH_MATCH') return NotificationType.newSavedSearchMatch;
         if (normalized == 'PRICE_DROP_MATCH') return NotificationType.priceDropMatch;
         if (normalized == 'NEW_CHAT_MESSAGE') return NotificationType.newChatMessage;
+        if (normalized == 'PROPERTY_MATCH' || normalized == 'PROPERTYMATCH') return NotificationType.propertyMatch;
+        if (normalized == 'PROPERTY_WATCH' || normalized == 'PROPERTYWATCH') return NotificationType.propertyWatch;
+        if (normalized == 'SURVEY_ACTIVITY' || normalized == 'SURVEYACTIVITY') return NotificationType.surveyActivity;
+        if (normalized == 'LEGAL_NOTICE_ALERT' || normalized == 'LEGALNOTICEALERT') return NotificationType.legalNoticeAlert;
+        if (normalized == 'DISPUTE_ACTIVITY' || normalized == 'DISPUTEACTIVITY') return NotificationType.disputeActivity;
         return NotificationType.system;
       },
     );

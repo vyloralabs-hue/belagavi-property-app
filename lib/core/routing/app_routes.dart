@@ -24,6 +24,7 @@ abstract class AppRoutes {
 
   // Property Owner / Management routes
   static const String addProperty = '/add-property';
+  static const String editProperty = '/edit-property/:id';
   static const String myProperties = '/my-properties';
   static const String adminProperties = '/admin-properties';
 
@@ -56,6 +57,12 @@ abstract class AppRoutes {
 
   // Notifications
   static const String notifications = '/notifications';
+
+  // Intelligence & Alerts routes
+  static const String propertyPreferences = '/property-preferences';
+  static const String propertyAlerts = '/property-alerts';
+  static const String propertyWatch = '/property-watch';
+  static const String addPropertyWatch = '/property-watch/add';
 
   // Real-Time Chat & Messages
   static const String messages = '/messages';

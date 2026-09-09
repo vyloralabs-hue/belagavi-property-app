@@ -9,8 +9,11 @@ import 'package:belagavi_property/features/property/domain/entities/property_ent
 import 'package:belagavi_property/features/property/presentation/providers/property_providers.dart';
 import 'package:belagavi_property/features/property/presentation/providers/favorites_notifier.dart';
 import 'package:belagavi_property/features/property/presentation/widgets/app_property_image.dart';
+import 'package:belagavi_property/features/property/services/property_media_resolver.dart';
+import 'package:belagavi_property/features/property/utils/owner_identity_bridge.dart';
 import 'package:belagavi_property/features/transaction/presentation/widgets/send_enquiry_modal.dart';
 import 'package:belagavi_property/features/chat/presentation/providers/chat_providers.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'widgets/property_reviews_widget.dart';
 import 'google_maps_launcher.dart';
 
@@ -236,20 +239,17 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
         (s) => s.favorites.any((f) => f.propertyId == property.id),
       ),
     );
-    final mediaList = property.mediaList;
-    final coverMedia =
-        mediaList.where((m) => m.isCover).firstOrNull ?? mediaList.firstOrNull;
-    final videoMedia = mediaList
+    final orderedMedia = PropertyMediaResolver.getOrderedMedia(property);
+    final coverUrl = PropertyMediaResolver.getCoverUrl(property);
+    final videoMedia = orderedMedia
         .where((m) => m.type == MediaType.video)
         .firstOrNull;
-    final imageList = mediaList
+    final imageList = orderedMedia
         .where((m) => m.type == MediaType.image)
         .toList();
     final allMediaUrls = imageList.isNotEmpty
         ? imageList.map((m) => m.mediaUrl).toList()
-        : (coverMedia != null && coverMedia.mediaUrl.isNotEmpty
-              ? [coverMedia.mediaUrl]
-              : <String>[]);
+        : [coverUrl];
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -349,7 +349,7 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
                             ClipRRect(
                               borderRadius: BorderRadius.circular(20),
                               child: AppPropertyImage(
-                                imageUrl: coverMedia?.mediaUrl,
+                                imageUrl: coverUrl,
                                 height: 220,
                                 width: double.infinity,
                                 fit: BoxFit.cover,
@@ -1568,58 +1568,196 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
                         border: Border.all(color: borderCol),
                         boxShadow: AppDesignSystem.cardShadow,
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: AppDesignSystem.brandGold.withValues(
-                                alpha: 0.15,
+                          Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: AppDesignSystem.brandGold.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppDesignSystem.brandGold,
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.person_rounded,
+                                  color: AppDesignSystem.brandGold,
+                                  size: 28,
+                                ),
                               ),
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: AppDesignSystem.brandGold,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.person_rounded,
-                              color: AppDesignSystem.brandGold,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'Verified Seller',
-                                      style: TextStyle(
-                                        fontFamily: AppDesignSystem.fontFamily,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: textP,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          property.verificationStatus == VerificationStatus.verified
+                                              ? 'Verified Seller'
+                                              : 'Registered Seller',
+                                          style: TextStyle(
+                                            fontFamily: AppDesignSystem.fontFamily,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: textP,
+                                          ),
+                                        ),
+                                        if (property.verificationStatus == VerificationStatus.verified) ...[
+                                          const SizedBox(width: 6),
+                                          const Icon(
+                                            Icons.verified_rounded,
+                                            color: Color(0xFF38BDF8),
+                                            size: 16,
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                    const SizedBox(width: 6),
-                                    const Icon(
-                                      Icons.verified_rounded,
-                                      color: Color(0xFF38BDF8),
-                                      size: 16,
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      property.verificationStatus == VerificationStatus.verified
+                                          ? 'Founder Verified Owner / Agent'
+                                          : 'Belagavi Property Registered Owner / Agent',
+                                      style: TextStyle(fontSize: 11, color: textS),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  'Belagavi Property Registered Owner / Agent',
-                                  style: TextStyle(fontSize: 11, color: textS),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          // Rule 6 & 7: Privacy-protected contact actions
+                          () {
+                            final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+                            final isOwner = currentUserId != null &&
+                                OwnerIdentityBridge.isOwnerSync(
+                                  callerId: currentUserId,
+                                  propertyOwnerId: property.ownerId,
+                                );
+
+                            if (isOwner) {
+                              return Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppDesignSystem.brandGold.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppDesignSystem.brandGold.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.shield_rounded, color: AppDesignSystem.brandGold, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'You are the owner of this property',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppDesignSystem.brandGold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+
+                            return Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final uri = Uri.parse('tel:+919113219906');
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(uri);
+                                          }
+                                        },
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Color(0xFF38BDF8)),
+                                          foregroundColor: const Color(0xFF38BDF8),
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.phone_rounded, size: 16),
+                                        label: const Text(
+                                          'Platform Call',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
+                                          final text = Uri.encodeComponent(
+                                            'Hello Belagavi Property, I am interested in property "${property.title}" (ID: ${property.id}). Please share more details.',
+                                          );
+                                          final nativeUri = Uri.parse('whatsapp://send?phone=919113219906&text=$text');
+                                          final webUri = Uri.parse('https://wa.me/919113219906?text=$text');
+                                          try {
+                                            if (await canLaunchUrl(nativeUri)) {
+                                              await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
+                                              return;
+                                            }
+                                          } catch (_) {}
+                                          if (await canLaunchUrl(webUri)) {
+                                            await launchUrl(webUri, mode: LaunchMode.externalApplication);
+                                          }
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF25D366),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 10),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        icon: const Icon(Icons.chat_rounded, size: 16),
+                                        label: const Text(
+                                          'WhatsApp Help',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.04),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.grey.withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.lock_outline_rounded, size: 14, color: Colors.grey),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Owner direct contact and exact door number are privacy-protected. Available via Full Details Unlock.',
+                                          style: TextStyle(fontSize: 10, color: Colors.grey),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
-                            ),
-                          ),
+                            );
+                          }(),
                         ],
                       ),
                     ),
@@ -1783,7 +1921,10 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
                                     context.push('/phone-login');
                                     return;
                                   }
-                                  if (user.uid == property.ownerId) {
+                                  if (OwnerIdentityBridge.isOwnerSync(
+                                    callerId: user.uid,
+                                    propertyOwnerId: property.ownerId,
+                                  )) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(

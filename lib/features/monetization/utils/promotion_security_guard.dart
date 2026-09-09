@@ -1,6 +1,7 @@
 import 'package:belagavi_property/core/errors/security_exceptions.dart';
 import 'package:belagavi_property/core/security/user_role.dart';
 import 'package:belagavi_property/features/property/domain/entities/property_entities.dart';
+import 'package:belagavi_property/features/property/utils/owner_identity_bridge.dart';
 import '../domain/entities/promotion_entities.dart';
 
 class PromotionSecurityGuard {
@@ -48,7 +49,7 @@ class PromotionSecurityGuard {
     }
 
     final isAdmin = userRole != null && userRole.isAdminOrFounder;
-    if (!isAdmin && property.ownerId != requestingUserId) {
+    if (!isAdmin && !OwnerIdentityBridge.isOwnerSync(callerId: requestingUserId, propertyOwnerId: property.ownerId)) {
       throw const AccessDeniedException(
         'Access Denied: You can only promote properties owned by your account.',
       );
@@ -78,7 +79,10 @@ class PromotionSecurityGuard {
     if (userRole != null && userRole.isAdminOrFounder) {
       return;
     }
-    if (requestingUserId != promotion.ownerId) {
+    if (!OwnerIdentityBridge.isOwnerSync(
+      callerId: requestingUserId,
+      propertyOwnerId: promotion.ownerId,
+    )) {
       throw AccessDeniedException('Access Denied: You cannot $actionName for another seller\'s property.');
     }
   }

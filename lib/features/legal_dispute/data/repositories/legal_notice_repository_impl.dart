@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:injectable/injectable.dart';
 import '../../../../core/repositories/base_repository.dart';
 import '../../../../core/security/user_role.dart';
@@ -105,6 +106,21 @@ class LegalNoticeRepositoryImpl extends BaseRepository implements LegalNoticeRep
       noticeId,
       authenticatedUserId: authenticatedUserId,
       userRole: userRole,
+    ));
+  }
+
+  @override
+  FutureEither<String> uploadLegalNoticeDocumentFile({
+    required String noticeId,
+    required String fileName,
+    required Uint8List fileBytes,
+    String? authenticatedUserId,
+  }) async {
+    return safeCall(() => _remoteDataSource.uploadLegalNoticeDocumentFile(
+      noticeId: noticeId,
+      fileName: fileName,
+      fileBytes: fileBytes,
+      authenticatedUserId: authenticatedUserId,
     ));
   }
 

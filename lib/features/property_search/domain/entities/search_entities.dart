@@ -33,6 +33,15 @@ class SearchQueryEntity extends Equatable {
   final int limit;
   final int offset;
 
+  // Bounding-box and radius exploration fields
+  final double? minLatitude;
+  final double? maxLatitude;
+  final double? minLongitude;
+  final double? maxLongitude;
+  final double? centerLatitude;
+  final double? centerLongitude;
+  final double? radiusKm;
+
   const SearchQueryEntity({
     this.rawQuery,
     this.country,
@@ -64,6 +73,13 @@ class SearchQueryEntity extends Equatable {
     this.sortBy = 'created_at_desc',
     this.limit = 20,
     this.offset = 0,
+    this.minLatitude,
+    this.maxLatitude,
+    this.minLongitude,
+    this.maxLongitude,
+    this.centerLatitude,
+    this.centerLongitude,
+    this.radiusKm,
   });
 
   SearchQueryEntity copyWith({
@@ -97,6 +113,13 @@ class SearchQueryEntity extends Equatable {
     String? sortBy,
     int? limit,
     int? offset,
+    double? minLatitude,
+    double? maxLatitude,
+    double? minLongitude,
+    double? maxLongitude,
+    double? centerLatitude,
+    double? centerLongitude,
+    double? radiusKm,
   }) {
     return SearchQueryEntity(
       rawQuery: rawQuery ?? this.rawQuery,
@@ -129,6 +152,13 @@ class SearchQueryEntity extends Equatable {
       sortBy: sortBy ?? this.sortBy,
       limit: limit ?? this.limit,
       offset: offset ?? this.offset,
+      minLatitude: minLatitude ?? this.minLatitude,
+      maxLatitude: maxLatitude ?? this.maxLatitude,
+      minLongitude: minLongitude ?? this.minLongitude,
+      maxLongitude: maxLongitude ?? this.maxLongitude,
+      centerLatitude: centerLatitude ?? this.centerLatitude,
+      centerLongitude: centerLongitude ?? this.centerLongitude,
+      radiusKm: radiusKm ?? this.radiusKm,
     );
   }
 
@@ -164,6 +194,13 @@ class SearchQueryEntity extends Equatable {
       'sortBy': sortBy,
       'limit': limit,
       'offset': offset,
+      'minLatitude': minLatitude,
+      'maxLatitude': maxLatitude,
+      'minLongitude': minLongitude,
+      'maxLongitude': maxLongitude,
+      'centerLatitude': centerLatitude,
+      'centerLongitude': centerLongitude,
+      'radiusKm': radiusKm,
     };
   }
 
@@ -219,6 +256,13 @@ class SearchQueryEntity extends Equatable {
       sortBy: json['sortBy'] as String? ?? 'created_at_desc',
       limit: (json['limit'] as num?)?.toInt() ?? 20,
       offset: (json['offset'] as num?)?.toInt() ?? 0,
+      minLatitude: (json['minLatitude'] as num?)?.toDouble(),
+      maxLatitude: (json['maxLatitude'] as num?)?.toDouble(),
+      minLongitude: (json['minLongitude'] as num?)?.toDouble(),
+      maxLongitude: (json['maxLongitude'] as num?)?.toDouble(),
+      centerLatitude: (json['centerLatitude'] as num?)?.toDouble(),
+      centerLongitude: (json['centerLongitude'] as num?)?.toDouble(),
+      radiusKm: (json['radiusKm'] as num?)?.toDouble(),
     );
   }
 
@@ -254,6 +298,13 @@ class SearchQueryEntity extends Equatable {
         sortBy,
         limit,
         offset,
+        minLatitude,
+        maxLatitude,
+        minLongitude,
+        maxLongitude,
+        centerLatitude,
+        centerLongitude,
+        radiusKm,
       ];
 }
 

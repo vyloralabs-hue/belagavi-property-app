@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:belagavi_property/features/property/domain/entities/property_entities.dart';
-import 'package:belagavi_property/features/property_search/domain/entities/search_entities.dart';
-import 'package:belagavi_property/features/property_search/domain/entities/user_location_context.dart';
 import '../../../property_search/presentation/providers/property_search_notifier.dart';
 import '../../../property_search/presentation/providers/user_location_notifier.dart';
+import '../../../property_search/domain/entities/user_location_context.dart';
 import '../../../property/presentation/providers/favorites_notifier.dart';
 import '../../theme/app_design_system.dart';
 import 'widgets/property_filter_modal.dart';
-import 'widgets/location_selector_modal.dart';
 import 'widgets/universal_location_search_modal.dart';
 import '../../../../core/utils/number_formatter.dart';
 import '../../../auth/utils/auth_session_storage_helper.dart';
+import '../../../intelligence/presentation/views/save_search_requirement_modal.dart';
+import 'widgets/marketplace_map_explorer_view.dart';
 
 class SmartPropertySearchView extends ConsumerStatefulWidget {
   final String? initialCategory;
@@ -28,10 +28,15 @@ class _SmartPropertySearchViewState
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   PropertyCategory? _selectedCategory;
+  bool _isMapView = false;
 
   @override
   void initState() {
     super.initState();
+    final currentLoc = ref.read(userLocationNotifierProvider).current;
+    if (currentLoc.mode == DiscoveryLocationMode.exploreMap) {
+      _isMapView = true;
+    }
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final notifier = ref.read(propertySearchNotifierProvider.notifier);
@@ -50,12 +55,18 @@ class _SmartPropertySearchViewState
   }
 
   PropertyCategory? _parseCategoryString(String cat) {
-    if (cat == 'residential') return PropertyCategory.residential;
-    if (cat == 'plotLand' || cat == 'plot' || cat == 'plots')
+    if (cat == 'residential') {
+      return PropertyCategory.residential;
+    }
+    if (cat == 'plotLand' || cat == 'plot' || cat == 'plots') {
       return PropertyCategory.plotLand;
-    if (cat == 'commercial') return PropertyCategory.commercial;
-    if (cat == 'land' || cat == 'raw_land' || cat == 'rawLand')
+    }
+    if (cat == 'commercial') {
+      return PropertyCategory.commercial;
+    }
+    if (cat == 'land' || cat == 'raw_land' || cat == 'rawLand') {
       return PropertyCategory.land;
+    }
     return PropertyCategory.values.firstWhere(
       (e) => e.name.toLowerCase() == cat.toLowerCase(),
       orElse: () => PropertyCategory.residential,
@@ -153,6 +164,14 @@ class _SmartPropertySearchViewState
         ),
         actions: [
           IconButton(
+            icon: Icon(
+              _isMapView ? Icons.view_list_rounded : Icons.map_outlined,
+              color: textP,
+            ),
+            tooltip: _isMapView ? 'Switch to List' : 'Explore on Map',
+            onPressed: () => setState(() => _isMapView = !_isMapView),
+          ),
+          IconButton(
             icon: Icon(Icons.bookmark_outline_rounded, color: textP),
             tooltip: 'My Saved Searches',
             onPressed: () => context.go('/saved-searches'),
@@ -162,7 +181,12 @@ class _SmartPropertySearchViewState
             tooltip: 'Filter Properties',
             onPressed: _openFilterModal,
           ),
-          ElevatedButton.icon(
+          IconButton(
+            icon: const Icon(
+              Icons.add_circle_outline_rounded,
+              color: AppDesignSystem.brandGold,
+            ),
+            tooltip: 'Add Property',
             onPressed: () {
               final catParam = _selectedCategory?.name ?? 'residential';
               final target = '/add-property?category=$catParam';
@@ -172,19 +196,8 @@ class _SmartPropertySearchViewState
                 context.push(target);
               }
             },
-            icon: const Icon(Icons.add_rounded, size: 16),
-            label: const Text('Add Property'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppDesignSystem.brandGold,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
@@ -303,14 +316,17 @@ class _SmartPropertySearchViewState
                   .watch(propertySearchNotifierProvider.notifier)
                   .currentQuery;
               final parts = <String>[];
-              if (currentQ.city != null && currentQ.city!.isNotEmpty)
+              if (currentQ.city != null && currentQ.city!.isNotEmpty) {
                 parts.add(currentQ.city!);
-              if (currentQ.locality != null && currentQ.locality!.isNotEmpty)
+              }
+              if (currentQ.locality != null && currentQ.locality!.isNotEmpty) {
                 parts.add(currentQ.locality!);
+              }
               if (currentQ.district != null &&
                   currentQ.district!.isNotEmpty &&
-                  parts.isEmpty)
+                  parts.isEmpty) {
                 parts.add(currentQ.district!);
+              }
               final userLoc = ref.watch(userLocationNotifierProvider).current;
               final breadcrumb = parts.isNotEmpty
                   ? parts.join(' › ')
@@ -351,7 +367,6 @@ class _SmartPropertySearchViewState
                         size: 16,
                         color: textS,
                       ),
-                      const SizedBox(width: 8),
                       TextButton(
                         onPressed: () {
                           ref
@@ -372,6 +387,29 @@ class _SmartPropertySearchViewState
                           ),
                         ),
                       ),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        onPressed: () => setState(() => _isMapView = !_isMapView),
+                        icon: Icon(
+                          _isMapView
+                              ? Icons.view_list_rounded
+                              : Icons.map_outlined,
+                          size: 14,
+                          color: AppDesignSystem.brandGold,
+                        ),
+                        label: Text(
+                          _isMapView ? 'List' : 'Map',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: AppDesignSystem.brandGold,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          minimumSize: const Size(44, 28),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -381,39 +419,70 @@ class _SmartPropertySearchViewState
 
           // ─── Dynamic Results Section ───────────────────────────────────────
           Expanded(
-            child: switch (searchState) {
-              PropertySearchInitial() ||
-              PropertySearchLoading() => const Center(
-                child: CircularProgressIndicator(
-                  color: AppDesignSystem.brandGold,
-                ),
-              ),
-              PropertySearchError(message: final _) => _buildErrorState(
-                context,
-              ),
-              PropertySearchSuccess(
-                result: final searchRes,
-                isLoadingMore: final loadingMore,
-              ) =>
-                searchRes.properties.isEmpty
-                    ? _buildEmptyCategoryState(context)
+            child: _isMapView
+                ? MarketplaceMapExplorerView(
+                    onSwitchToList: () => setState(() => _isMapView = false),
+                  )
+                : switch (searchState) {
+                    PropertySearchInitial() ||
+                    PropertySearchLoading() => const Center(
+                      child: CircularProgressIndicator(
+                        color: AppDesignSystem.brandGold,
+                      ),
+                    ),
+                    PropertySearchError(message: final _) => _buildErrorState(
+                      context,
+                    ),
+                    PropertySearchSuccess(
+                      result: final searchRes,
+                      isLoadingMore: final loadingMore,
+                    ) =>
+                      searchRes.properties.isEmpty
+                          ? _buildEmptyCategoryState(context)
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Count Header
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                            child: Text(
-                              NumberFormatter.formatPageRange(
-                                searchRes.offset,
-                                searchRes.properties.length,
-                                searchRes.totalCount,
-                              ),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: textS,
-                              ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  NumberFormatter.formatPageRange(
+                                    searchRes.offset,
+                                    searchRes.properties.length,
+                                    searchRes.totalCount,
+                                  ),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: textS,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    minimumSize: const Size(0, 28),
+                                  ),
+                                  onPressed: () {
+                                    final q = ref.read(propertySearchNotifierProvider.notifier).currentQuery;
+                                    SaveSearchRequirementModal.show(
+                                      context,
+                                      category: q.category?.name,
+                                      locality: q.locality,
+                                      minPrice: q.minPrice,
+                                      maxPrice: q.maxPrice,
+                                      bedrooms: q.minBedrooms,
+                                    );
+                                  },
+                                  icon: const Icon(Icons.notifications_active_outlined, size: 15, color: AppDesignSystem.brandGold),
+                                  label: const Text(
+                                    'Save Search & Get Alerts',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppDesignSystem.brandGold),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           Expanded(
@@ -952,12 +1021,7 @@ class _SmartPropertySearchViewState
               alignment: WrapAlignment.center,
               children: [
                 OutlinedButton.icon(
-                  onPressed: () => showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (_) => const LocationSelectorModal(),
-                  ),
+                  onPressed: () => UniversalLocationSearchModal.show(context),
                   icon: const Icon(Icons.edit_location_alt_outlined, size: 16),
                   label: const Text('Change Location'),
                   style: OutlinedButton.styleFrom(

@@ -48,6 +48,8 @@ import '../../features/legal_dispute/presentation/views/my_disputed_properties_v
 import '../../features/legal_dispute/presentation/views/legal_notice_hub_view.dart';
 import '../../features/legal_dispute/presentation/views/add_legal_notice_view.dart';
 import '../../features/legal_dispute/presentation/views/legal_notice_detail_view.dart';
+import '../../features/legal_dispute/domain/entities/dispute_entities.dart';
+import '../../features/legal_dispute/domain/entities/legal_notice_entities.dart';
 import '../../features/presentation_ui/views/notifications/notification_center_view.dart';
 import '../../features/transaction/presentation/views/buyer_enquiries_view.dart';
 import '../../features/transaction/presentation/views/seller_enquiries_view.dart';
@@ -57,6 +59,11 @@ import '../../features/property/presentation/views/property_due_diligence_view.d
 import '../../features/property/domain/entities/property_entities.dart';
 import '../../features/presentation_ui/views/chat/chat_conversation_view.dart';
 import '../../features/presentation_ui/views/chat/user_conversations_list_view.dart';
+import '../../features/intelligence/presentation/views/my_property_alerts_view.dart';
+import '../../features/intelligence/presentation/views/property_watch_view.dart';
+import '../../features/intelligence/presentation/views/add_property_watch_view.dart';
+import '../../features/presentation_ui/views/property/property_vault_view.dart';
+import '../../features/presentation_ui/views/monetization/pricing_plans_view.dart';
 import 'app_routes.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -268,6 +275,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: '/property-vault',
+        name: 'property-vault',
+        builder: (context, state) => const PropertyVaultView(),
+      ),
+      GoRoute(
+        path: '/pricing-plans',
+        name: 'pricing-plans',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return PricingPlansView(
+            initialProductFamily: extra?['productFamily'] as String?,
+            propertyId: extra?['propertyId'] as String?,
+          );
+        },
+      ),
+      GoRoute(
         path: AppRoutes.adsManagement,
         name: 'ads-management',
         builder: (context, state) => const AdsManagementView(),
@@ -302,9 +325,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               orElse: () => PropertyCategory.residential,
             );
           }
+          return AddPropertyWizardView(initialCategory: category);
+        },
+      ),
+      GoRoute(
+        path: '/edit-property/:id',
+        name: 'edit-property',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
           final editProp = state.extra as PropertyEntity?;
           return AddPropertyWizardView(
-            initialCategory: category,
+            editPropertyId: id.isNotEmpty ? id : editProp?.id,
             editProperty: editProp,
           );
         },
@@ -322,7 +353,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.addDispute,
         name: 'add-dispute',
-        builder: (context, state) => const AddDisputedPropertyView(),
+        builder: (context, state) {
+          final extraDispute = state.extra is PropertyDisputeEntity ? state.extra as PropertyDisputeEntity : null;
+          return AddDisputedPropertyView(
+            editDispute: extraDispute,
+            editDisputeId: extraDispute?.id,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/dispute/edit/:id',
+        name: 'edit-dispute',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final extraDispute = state.extra is PropertyDisputeEntity ? state.extra as PropertyDisputeEntity : null;
+          return AddDisputedPropertyView(
+            editDisputeId: id,
+            editDispute: extraDispute,
+          );
+        },
       ),
       GoRoute(
         path: '/disputed-properties/:id',
@@ -348,7 +397,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.addLegalNotice,
         name: 'add-legal-notice',
-        builder: (context, state) => const AddLegalNoticeView(),
+        builder: (context, state) {
+          final extraNotice = state.extra is TransactionLegalNoticeEntity ? state.extra as TransactionLegalNoticeEntity : null;
+          return AddLegalNoticeView(
+            editNotice: extraNotice,
+            editNoticeId: extraNotice?.id,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/legal-notice/edit/:id',
+        name: 'edit-legal-notice',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          final extraNotice = state.extra is TransactionLegalNoticeEntity ? state.extra as TransactionLegalNoticeEntity : null;
+          return AddLegalNoticeView(
+            editNoticeId: id,
+            editNotice: extraNotice,
+          );
+        },
       ),
       GoRoute(
         path: '/legal-notices/:id',
@@ -447,6 +514,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/notifications',
         name: 'notifications',
         builder: (context, state) => const NotificationCenterView(),
+      ),
+
+      GoRoute(
+        path: '/property-alerts',
+        name: 'property-alerts',
+        builder: (context, state) => const MyPropertyAlertsView(),
+      ),
+
+      GoRoute(
+        path: '/property-watch',
+        name: 'property-watch',
+        builder: (context, state) => const PropertyWatchView(),
+      ),
+
+      GoRoute(
+        path: '/property-watch/add',
+        name: 'property-watch-add',
+        builder: (context, state) => const AddPropertyWatchView(),
       ),
 
       // ─── Screen 8: Premium Home Dashboard (tabbed shell) ─────────────────

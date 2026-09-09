@@ -6,6 +6,7 @@ import 'package:belagavi_property/features/monetization/presentation/providers/p
 import 'package:belagavi_property/features/monetization/utils/promotion_security_guard.dart';
 import 'package:belagavi_property/features/presentation_ui/theme/app_design_system.dart';
 import 'package:belagavi_property/features/property/domain/entities/property_entities.dart';
+import 'package:belagavi_property/features/property/utils/owner_identity_bridge.dart';
 
 enum PromotionCheckoutState {
   selectingPackage,
@@ -54,10 +55,17 @@ class _PromotePropertyModalState extends ConsumerState<PromotePropertyModal> {
       return;
     }
 
-    if (user.uid != widget.property.ownerId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Access Denied: You do not own this property.')),
-      );
+    final isOwner = await OwnerIdentityBridge.isOwner(
+      callerId: user.uid,
+      propertyOwnerId: widget.property.ownerId,
+    );
+
+    if (!isOwner) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Access Denied: You do not own this property.')),
+        );
+      }
       return;
     }
 

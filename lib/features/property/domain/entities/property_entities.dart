@@ -342,6 +342,14 @@ class PropertyEntity extends Equatable {
   final double? longitude;
   final int viewsCount;
   final Map<String, dynamic> features;
+  final bool isPaused;
+  final bool isFeatured;
+  final String listingAccessType; // 'free_residential', 'commercial_paid', 'grandfathered'
+  final DateTime? listingAccessStartedAt;
+  final DateTime? freeListingExpiresAt;
+  final DateTime? listingExpiresAt;
+  final String? activePlanId;
+  final bool isGrandfathered;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -371,9 +379,69 @@ class PropertyEntity extends Equatable {
     this.longitude,
     this.viewsCount = 0,
     this.features = const {},
+    this.isPaused = false,
+    this.isFeatured = false,
+    this.listingAccessType = 'free_residential',
+    this.listingAccessStartedAt,
+    this.freeListingExpiresAt,
+    this.listingExpiresAt,
+    this.activePlanId,
+    this.isGrandfathered = false,
     required this.createdAt,
     required this.updatedAt,
   });
+
+  /// True if this property is categorized as commercial/industrial.
+  bool get isCommercial =>
+      category == PropertyCategory.commercial ||
+      category == PropertyCategory.industrial ||
+      type == PropertySubtype.commercialPlot ||
+      type == PropertySubtype.commercialOffice ||
+      type == PropertySubtype.commercialShop ||
+      type == PropertySubtype.commercialShowroom ||
+      type == PropertySubtype.warehouse ||
+      type == PropertySubtype.warehouseGodown ||
+      type == PropertySubtype.industrialLand;
+
+  /// True if eligible for the 15-day free residential listing window.
+  bool get isEligibleFor15DayFreeListing => !isCommercial;
+
+  /// True if the 15-day free listing period has expired.
+  bool get isFreeListingExpired {
+    if (isGrandfathered || listingAccessType == 'grandfathered') return false;
+    if (listingAccessType == 'commercial_paid') return false;
+    if (freeListingExpiresAt == null) return false;
+    return DateTime.now().isAfter(freeListingExpiresAt!);
+  }
+
+  /// Remaining days in the 15-day free listing window.
+  int? get remainingFreeDays {
+    if (isGrandfathered || listingAccessType == 'grandfathered') return null;
+    if (listingAccessType == 'commercial_paid' || freeListingExpiresAt == null) return 0;
+    final diff = freeListingExpiresAt!.difference(DateTime.now()).inSeconds;
+    if (diff <= 0) return 0;
+    return (diff / 86400).ceil();
+  }
+
+  /// True if the listing is expired according to server/database timestamp.
+  /// Grandfathered properties never expire.
+  bool get isListingExpired {
+    if (isGrandfathered || listingAccessType == 'grandfathered') return false;
+    if (listingExpiresAt != null) {
+      return DateTime.now().isAfter(listingExpiresAt!);
+    }
+    return isFreeListingExpired;
+  }
+
+  /// Whether the listing is currently eligible for public marketplace visibility.
+  /// Must be in a publicly visible status (active/published/approved), not paused,
+  /// and not expired.
+  bool get isPubliclyVisibleNow {
+    if (!status.isPubliclyVisible) return false;
+    if (isPaused) return false;
+    if (isListingExpired) return false;
+    return true;
+  }
 
   PropertyEntity copyWith({
     String? id,
@@ -401,6 +469,14 @@ class PropertyEntity extends Equatable {
     double? longitude,
     int? viewsCount,
     Map<String, dynamic>? features,
+    bool? isPaused,
+    bool? isFeatured,
+    String? listingAccessType,
+    DateTime? listingAccessStartedAt,
+    DateTime? freeListingExpiresAt,
+    DateTime? listingExpiresAt,
+    String? activePlanId,
+    bool? isGrandfathered,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -430,6 +506,14 @@ class PropertyEntity extends Equatable {
       longitude: longitude ?? this.longitude,
       viewsCount: viewsCount ?? this.viewsCount,
       features: features ?? this.features,
+      isPaused: isPaused ?? this.isPaused,
+      isFeatured: isFeatured ?? this.isFeatured,
+      listingAccessType: listingAccessType ?? this.listingAccessType,
+      listingAccessStartedAt: listingAccessStartedAt ?? this.listingAccessStartedAt,
+      freeListingExpiresAt: freeListingExpiresAt ?? this.freeListingExpiresAt,
+      listingExpiresAt: listingExpiresAt ?? this.listingExpiresAt,
+      activePlanId: activePlanId ?? this.activePlanId,
+      isGrandfathered: isGrandfathered ?? this.isGrandfathered,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -464,6 +548,14 @@ class PropertyEntity extends Equatable {
         longitude,
         viewsCount,
         features,
+        isPaused,
+        isFeatured,
+        listingAccessType,
+        listingAccessStartedAt,
+        freeListingExpiresAt,
+        listingExpiresAt,
+        activePlanId,
+        isGrandfathered,
         createdAt,
         updatedAt,
       ];
@@ -630,3 +722,6 @@ extension VerificationStatusX on VerificationStatus {
     };
   }
 }
+
+/// Convenience alias for PropertyEntity
+typedef Property = PropertyEntity;

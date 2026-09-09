@@ -6,6 +6,7 @@ import 'widgets/home_property_type_grid.dart';
 import 'widgets/invest_with_us_home_card.dart';
 import 'widgets/home_property_protection_section.dart';
 import 'widgets/home_real_property_feed.dart';
+import '../../../intelligence/presentation/widgets/home_personalized_feed.dart';
 
 /// Global Premium Responsive Home Screen
 /// Unified Production UI Architecture supporting System, Light & Dark Themes
@@ -16,7 +17,8 @@ import 'widgets/home_real_property_feed.dart';
 /// 3. 4 Primary Categories (Residential, Plot, Commercial, Raw Land)
 /// 4. Invest with Belgaum Property LLP Banner
 /// 5. Property Protection (Disputed Property & Property Legal Notices)
-/// 6. Real Property Feed / Empty State (Zero Fake Listings)
+/// 6. Personalized Feed ("Properties For You" matching active preference)
+/// 7. Real Property Feed / Empty State (Zero Fake Listings)
 class PremiumHomeView extends StatelessWidget {
   const PremiumHomeView({super.key});
 
@@ -38,6 +40,7 @@ class PremiumHomeView extends StatelessWidget {
                   HomePropertyTypeGrid(),
                   InvestWithUsHomeCard(),
                   HomePropertyProtectionSection(),
+                  HomePersonalizedFeed(),
                   HomeRealPropertyFeed(),
                   SizedBox(height: 32),
                 ],

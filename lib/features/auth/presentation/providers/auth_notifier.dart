@@ -251,4 +251,20 @@ class AuthNotifier extends Notifier<AuthState> {
     await AuthSessionStorageHelper.logout();
     state = const Unauthenticated();
   }
+
+  Future<bool> deleteAccount() async {
+    state = const AuthLoading();
+    final result = await _repository.deleteAccount();
+    return result.fold(
+      (failure) {
+        state = AuthError(failure.message);
+        return false;
+      },
+      (_) async {
+        await AuthSessionStorageHelper.logout();
+        state = const Unauthenticated();
+        return true;
+      },
+    );
+  }
 }

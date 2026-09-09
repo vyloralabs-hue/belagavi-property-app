@@ -1,4 +1,4 @@
-﻿import 'package:belagavi_property/core/error/failures.dart';
+import 'package:belagavi_property/core/error/failures.dart';
 import 'package:belagavi_property/core/security/user_role.dart';
 import 'package:belagavi_property/features/property/domain/entities/property_entities.dart';
 import 'package:belagavi_property/features/property/domain/repositories/property_repository.dart';
@@ -100,6 +100,20 @@ class MockPropertyRepositoryImpl implements PropertyRepository {
   @override
   Future<Either<Failure, AIPropertyAnalysisEntity>> analyzePropertyWithAI(PropertyEntity property) async {
     return right(const AIPropertyAnalysisEntity(qualityScore: 85));
+  }
+
+  @override
+  Future<Either<Failure, PropertyEntity>> setPropertyPaused({
+    required String propertyId,
+    required bool isPaused,
+    required String authenticatedUserId,
+    UserRole? userRole,
+  }) async {
+    final existing = storage[propertyId];
+    if (existing == null) return left(const ServerFailure('Not found'));
+    final updated = existing.copyWith(isPaused: isPaused);
+    storage[propertyId] = updated;
+    return right(updated);
   }
 }
 

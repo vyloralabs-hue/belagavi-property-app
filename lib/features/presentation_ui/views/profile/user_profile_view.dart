@@ -6,24 +6,52 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/security/biometric_auth_service.dart';
-import '../../../../core/utils/app_logger.dart';
 import '../../../auth/domain/entities/user_profile_entity.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../auth/presentation/providers/auth_state.dart';
 import '../../../auth/utils/auth_session_storage_helper.dart';
-import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/localization/language_selector_modal.dart';
 import '../../../../core/localization/localization_provider.dart';
 import '../../theme/app_design_system.dart';
 import '../../theme/app_theme_manager.dart';
+import '../../../property/presentation/providers/property_providers.dart';
+import '../../../property/domain/entities/property_entities.dart';
+import '../../../intelligence/presentation/views/property_preference_modal.dart';
 
-class UserProfileView extends ConsumerWidget {
+class UserProfileView extends ConsumerStatefulWidget {
   const UserProfileView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UserProfileView> createState() => _UserProfileViewState();
+}
+
+class _UserProfileViewState extends ConsumerState<UserProfileView> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  void _loadData() {
+    try {
+      final userId = (Firebase.apps.isNotEmpty
+              ? FirebaseAuth.instance.currentUser?.uid
+              : null) ??
+          AuthSessionStorageHelper.getUserUid() ??
+          '';
+      if (userId.isNotEmpty) {
+        ref.read(myPropertiesNotifierProvider.notifier).fetchMyProperties(userId);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final themeMode = ref.watch(appThemeManagerProvider);
+    final myPropertiesState = ref.watch(myPropertiesNotifierProvider);
 
     final User? firebaseUser = (Firebase.apps.isNotEmpty)
         ? FirebaseAuth.instance.currentUser
@@ -108,6 +136,13 @@ class UserProfileView extends ConsumerWidget {
     final textS = AppDesignSystem.textS(context);
     final borderCol = AppDesignSystem.borderCol(context);
 
+    // Listing counts
+    final allProps = myPropertiesState.allProperties;
+    final activeCount = allProps.where((p) => (p.status == ListingStatus.active || p.status == ListingStatus.published) && !p.isPaused).length;
+    final onHoldCount = allProps.where((p) => p.isPaused || p.status == ListingStatus.paused).length;
+    final underReviewCount = allProps.where((p) => p.status == ListingStatus.underReview || p.status == ListingStatus.pendingVerification || p.status == ListingStatus.submitted).length;
+    final soldCount = allProps.where((p) => p.status == ListingStatus.sold).length;
+
     return Scaffold(
       backgroundColor: scaffoldBg,
       appBar: AppBar(
@@ -124,221 +159,237 @@ class UserProfileView extends ConsumerWidget {
         backgroundColor: surfaceBg,
         elevation: 0,
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        children: [
-          // ── Profile / Guest Card ──
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppDesignSystem.brandGold, width: 1.5),
-              boxShadow: AppDesignSystem.cardShadow,
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    // Avatar Ring
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppDesignSystem.brandGold,
-                          width: 2,
-                        ),
-                        color: AppDesignSystem.brandGold.withValues(
-                          alpha: 0.12,
-                        ),
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+            // ── 1. User Header Card ──
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppDesignSystem.brandGold, width: 1.5),
+                boxShadow: AppDesignSystem.cardShadow,
+              ),
+              child: Row(
+                children: [
+                  // Avatar Ring
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppDesignSystem.brandGold,
+                        width: 2,
                       ),
-                      child: ClipOval(
-                        child:
-                            (displayPhotoUrl != null &&
-                                displayPhotoUrl.isNotEmpty)
-                            ? Image.network(
-                                displayPhotoUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(
-                                  child: Icon(
-                                    Icons.person_rounded,
-                                    size: 36,
-                                    color: AppDesignSystem.brandGold,
-                                  ),
-                                ),
-                              )
-                            : const Center(
+                      color: AppDesignSystem.brandGold.withValues(
+                        alpha: 0.12,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child:
+                          (displayPhotoUrl != null &&
+                              displayPhotoUrl.isNotEmpty)
+                          ? Image.network(
+                              displayPhotoUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
                                 child: Icon(
                                   Icons.person_rounded,
                                   size: 36,
                                   color: AppDesignSystem.brandGold,
                                 ),
                               ),
-                      ),
+                            )
+                          : const Center(
+                              child: Icon(
+                                Icons.person_rounded,
+                                size: 36,
+                                color: AppDesignSystem.brandGold,
+                              ),
+                            ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName,
+                          style: TextStyle(
+                            fontFamily: AppDesignSystem.fontFamily,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: textP,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          displayEmail ?? '',
+                          style: TextStyle(
+                            fontFamily: AppDesignSystem.fontFamily,
+                            fontSize: 12,
+                            color: textS,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppDesignSystem.brandGold.withValues(
+                              alpha: 0.15,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppDesignSystem.brandGold,
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            roleBadge,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppDesignSystem.brandGold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── 2. Seller Listing Status Chips ──
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderCol, width: 1.2),
+                boxShadow: AppDesignSystem.cardShadow,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         children: [
+                          const Icon(
+                            Icons.real_estate_agent_rounded,
+                            size: 18,
+                            color: AppDesignSystem.brandGold,
+                          ),
+                          const SizedBox(width: 8),
                           Text(
-                            displayName,
+                            'Seller Listing Status',
                             style: TextStyle(
                               fontFamily: AppDesignSystem.fontFamily,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
                               color: textP,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            displayEmail ?? '',
-                            style: TextStyle(
-                              fontFamily: AppDesignSystem.fontFamily,
-                              fontSize: 12,
-                              color: textS,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppDesignSystem.brandGold.withValues(
-                                alpha: 0.15,
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: AppDesignSystem.brandGold,
-                                width: 0.8,
-                              ),
-                            ),
-                            child: Text(
-                              roleBadge,
-                              style: const TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                color: AppDesignSystem.brandGold,
-                                letterSpacing: 0.5,
-                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
-          // ── Theme Selector Card ──
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: borderCol, width: 1.2),
-              boxShadow: AppDesignSystem.cardShadow,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.palette_outlined,
-                      size: 18,
-                      color: AppDesignSystem.brandGold,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'App Appearance & Theme',
-                      style: TextStyle(
-                        fontFamily: AppDesignSystem.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: textP,
+                      GestureDetector(
+                        onTap: () => context.push('/my-properties'),
+                        child: const Text(
+                          'View All >',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppDesignSystem.brandGold,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildThemeOption(
-                        context: context,
-                        ref: ref,
-                        label: 'Light Mode',
-                        icon: Icons.light_mode_rounded,
-                        mode: ThemeMode.light,
-                        currentMode: themeMode,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildThemeOption(
-                        context: context,
-                        ref: ref,
-                        label: 'Dark Mode',
-                        icon: Icons.dark_mode_rounded,
-                        mode: ThemeMode.dark,
-                        currentMode: themeMode,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildThemeOption(
-                        context: context,
-                        ref: ref,
-                        label: 'System',
-                        icon: Icons.brightness_auto_rounded,
-                        mode: ThemeMode.system,
-                        currentMode: themeMode,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // ── App Language Tile ──
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: borderCol, width: 1.2),
-              boxShadow: AppDesignSystem.cardShadow,
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.language_rounded,
-                  size: 20,
-                  color: AppDesignSystem.brandGold,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
+                      _buildListingStatChip(
+                        context: context,
+                        label: 'Active',
+                        count: activeCount,
+                        color: const Color(0xFF10B981),
+                        icon: Icons.check_circle_rounded,
+                        onTap: () => context.push('/my-properties'),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildListingStatChip(
+                        context: context,
+                        label: 'On Hold',
+                        count: onHoldCount,
+                        color: const Color(0xFFD97706),
+                        icon: Icons.pause_circle_rounded,
+                        onTap: () => context.push('/my-properties'),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildListingStatChip(
+                        context: context,
+                        label: 'Under Review',
+                        count: underReviewCount,
+                        color: const Color(0xFF3B82F6),
+                        icon: Icons.hourglass_top_rounded,
+                        onTap: () => context.push('/my-properties'),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildListingStatChip(
+                        context: context,
+                        label: 'Sold',
+                        count: soldCount,
+                        color: const Color(0xFF64748B),
+                        icon: Icons.verified_rounded,
+                        onTap: () => context.push('/my-properties'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── 3. Theme Selector Card ──
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderCol, width: 1.2),
+                boxShadow: AppDesignSystem.cardShadow,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.palette_outlined,
+                        size: 18,
+                        color: AppDesignSystem.brandGold,
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        ref
-                            .watch(appLocalizationsProvider)
-                            .translate('appLanguageSetting'),
+                        'App Appearance & Theme',
                         style: TextStyle(
                           fontFamily: AppDesignSystem.fontFamily,
                           fontSize: 14,
@@ -346,146 +397,344 @@ class UserProfileView extends ConsumerWidget {
                           color: textP,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${ref.watch(localizationNotifierProvider).nativeName} (${ref.watch(localizationNotifierProvider).name})',
-                        style: TextStyle(fontSize: 12, color: textS),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildThemeOption(
+                          context: context,
+                          ref: ref,
+                          label: 'Light Mode',
+                          icon: Icons.light_mode_rounded,
+                          mode: ThemeMode.light,
+                          currentMode: themeMode,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildThemeOption(
+                          context: context,
+                          ref: ref,
+                          label: 'Dark Mode',
+                          icon: Icons.dark_mode_rounded,
+                          mode: ThemeMode.dark,
+                          currentMode: themeMode,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildThemeOption(
+                          context: context,
+                          ref: ref,
+                          label: 'System',
+                          icon: Icons.brightness_auto_rounded,
+                          mode: ThemeMode.system,
+                          currentMode: themeMode,
+                        ),
                       ),
                     ],
                   ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => LanguageSelectorModal.show(context),
-                  icon: const Icon(Icons.translate_rounded, size: 14),
-                  label: const Text(
-                    'Change',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── 4. App Language Tile ──
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderCol, width: 1.2),
+                boxShadow: AppDesignSystem.cardShadow,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.language_rounded,
+                    size: 20,
+                    color: AppDesignSystem.brandGold,
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1E3A8A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ref
+                              .watch(appLocalizationsProvider)
+                              .translate('appLanguageSetting'),
+                          style: TextStyle(
+                            fontFamily: AppDesignSystem.fontFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: textP,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${ref.watch(localizationNotifierProvider).nativeName} (${ref.watch(localizationNotifierProvider).name})',
+                          style: TextStyle(fontSize: 12, color: textS),
+                        ),
+                      ],
                     ),
                   ),
+                  Material(
+                    color: const Color(0xFF1E3A8A),
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => LanguageSelectorModal.show(context),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.translate_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Change',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 5. Property Services & Management Header ──
+            Text(
+              'Property Services & Management',
+              style: TextStyle(
+                fontFamily: AppDesignSystem.fontFamily,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: textP,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            _InteractiveActionTile(
+              icon: Icons.favorite_rounded,
+              title: 'Liked / Saved Properties',
+              subtitle: 'Quick access to all your shortlisted homes & plots',
+              iconColor: Colors.redAccent,
+              onTap: () => context.push('/favorites'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.tune_rounded,
+              title: 'Property Preferences',
+              subtitle: 'Personalize recommendations, category, and budget criteria',
+              iconColor: AppDesignSystem.brandGold,
+              onTap: () => PropertyPreferenceModal.show(context),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.notifications_active_rounded,
+              title: 'My Property Alerts',
+              subtitle: 'Manage saved requirements & real-time match alerts',
+              iconColor: const Color(0xFF38BDF8),
+              onTap: () => context.push('/property-alerts'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.visibility_rounded,
+              title: 'Survey & Property Watch',
+              subtitle: 'Paid monitoring for land records, CTS, & public notices',
+              iconColor: const Color(0xFF10B981),
+              onTap: () => context.push('/property-watch'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.inbox_rounded,
+              title: 'Property Enquiries (Seller Leads)',
+              subtitle: 'Manage buyer leads, visits, negotiations & verification',
+              iconColor: const Color(0xFF15803D),
+              onTap: () => context.push('/seller-enquiries'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.home_work_rounded,
+              title: 'My Properties',
+              subtitle: 'View, hold, and manage your listed properties',
+              iconColor: AppDesignSystem.brandGold,
+              onTap: () => context.push('/my-properties'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.shield_rounded,
+              title: 'My Property Vault',
+              subtitle: 'Permanent storage for active, expired, drafts & records',
+              iconColor: AppDesignSystem.brandGold,
+              onTap: () => context.push('/property-vault'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.workspace_premium_rounded,
+              title: 'Plans & Pricing',
+              subtitle: 'Explore listing, notice, watch, and unlock plans',
+              iconColor: const Color(0xFFF59E0B),
+              onTap: () => context.push('/pricing-plans'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.admin_panel_settings_rounded,
+              title: 'Property Management (Admin)',
+              subtitle: 'Global management authority across all listings',
+              iconColor: const Color(0xFFE11D48),
+              onTap: () => context.push('/admin-properties'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.add_business_rounded,
+              title: 'List Your Property',
+              subtitle: 'Post a new house, plot, commercial space, or land',
+              iconColor: AppDesignSystem.brandGold,
+              onTap: () => context.push('/add-property'),
+            ),
+            _InteractiveActionTile(
+              icon: Icons.domain_rounded,
+              title: 'Builder Project Control Panel',
+              subtitle: 'Manage residential/commercial projects & unit inventory',
+              iconColor: AppDesignSystem.brandGold,
+              onTap: () => context.push('/builder-projects'),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 6. Account & Security Header ──
+            Text(
+              'Account & Security',
+              style: TextStyle(
+                fontFamily: AppDesignSystem.fontFamily,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: textP,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            _AccountVerificationDetailsCard(
+              firebaseUser: firebaseUser,
+              email: displayEmail,
+              phoneNumber:
+                  (firebaseUser?.phoneNumber != null &&
+                      firebaseUser!.phoneNumber!.isNotEmpty)
+                  ? firebaseUser.phoneNumber
+                  : AuthSessionStorageHelper.getMobileNumber(),
+              isSignedIn: isSignedIn,
+            ),
+            const SizedBox(height: 12),
+
+            // ── 7. Account Role & Biometric Toggle ──
+            _InteractiveActionTile(
+              icon: Icons.badge_outlined,
+              title: 'Account Type & Marketplace Role',
+              subtitle:
+                  'Manage whether you use Belagavi Property as Buyer, Seller, Broker, or Builder',
+              iconColor: AppDesignSystem.brandGold,
+              onTap: () => _showRoleManagementModal(context, ref),
+            ),
+            const _BiometricSettingTile(),
+
+            // ── 8. Logout / Sign In ──
+            if (isSignedIn) ...[
+              const SizedBox(height: 12),
+              _InteractiveActionTile(
+                icon: Icons.logout_rounded,
+                title: 'Logout',
+                subtitle: 'Sign out of Belagavi Property session',
+                iconColor: Colors.redAccent,
+                isDestructive: true,
+                onTap: () async {
+                  await AuthSessionStorageHelper.logout();
+                  if (context.mounted) {
+                    context.go('/auth');
+                  }
+                },
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              _InteractiveActionTile(
+                icon: Icons.login_rounded,
+                title: 'Sign In / Register',
+                subtitle: 'Access your saved properties, enquiries & profile',
+                iconColor: AppDesignSystem.brandGold,
+                onTap: () => context.go('/auth'),
+              ),
+            ],
+
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    ),
+  );
+  }
+
+  Widget _buildListingStatChip({
+    required BuildContext context,
+    required String label,
+    required int count,
+    required Color color,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
+            ),
+            child: Column(
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(height: 4),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontFamily: AppDesignSystem.fontFamily,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: AppDesignSystem.fontFamily,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 20),
-
-          // ── Section 1 Header ──
-          Text(
-            'Property Services & Management',
-            style: TextStyle(
-              fontFamily: AppDesignSystem.fontFamily,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: textP,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _InteractiveActionTile(
-            icon: Icons.favorite_rounded,
-            title: 'Liked / Saved Properties',
-            subtitle: 'Quick access to all your shortlisted homes & plots',
-            iconColor: Colors.redAccent,
-            onTap: () => context.push('/favorites'),
-          ),
-          _InteractiveActionTile(
-            icon: Icons.inbox_rounded,
-            title: 'Property Enquiries (Seller Leads)',
-            subtitle: 'Manage buyer leads, visits, negotiations & verification',
-            iconColor: const Color(0xFF15803D),
-            onTap: () => context.push('/seller-enquiries'),
-          ),
-          _InteractiveActionTile(
-            icon: Icons.home_work_rounded,
-            title: 'My Properties',
-            subtitle: 'View, hold, and manage your listed properties',
-            iconColor: AppDesignSystem.brandGold,
-            onTap: () => context.push('/my-properties'),
-          ),
-          _InteractiveActionTile(
-            icon: Icons.admin_panel_settings_rounded,
-            title: 'Property Management (Admin)',
-            subtitle: 'Global management authority across all listings',
-            iconColor: const Color(0xFFE11D48),
-            onTap: () => context.push('/admin-properties'),
-          ),
-          _InteractiveActionTile(
-            icon: Icons.add_business_rounded,
-            title: 'List Your Property',
-            subtitle: 'Post a new house, plot, commercial space, or land',
-            iconColor: AppDesignSystem.brandGold,
-            onTap: () => context.push('/add-property'),
-          ),
-          _InteractiveActionTile(
-            icon: Icons.domain_rounded,
-            title: 'Builder Project Control Panel',
-            subtitle: 'Manage residential/commercial projects & unit inventory',
-            iconColor: AppDesignSystem.brandGold,
-            onTap: () => context.push('/builder-projects'),
-          ),
-
-          const SizedBox(height: 20),
-
-          // ── Section 2 Header ──
-          Text(
-            'Account & Security',
-            style: TextStyle(
-              fontFamily: AppDesignSystem.fontFamily,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: textP,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _AccountVerificationDetailsCard(
-            firebaseUser: firebaseUser,
-            email: displayEmail,
-            phoneNumber:
-                (firebaseUser?.phoneNumber != null &&
-                    firebaseUser!.phoneNumber!.isNotEmpty)
-                ? firebaseUser.phoneNumber
-                : AuthSessionStorageHelper.getMobileNumber(),
-            isSignedIn: isSignedIn,
-          ),
-          const SizedBox(height: 12),
-
-          _InteractiveActionTile(
-            icon: Icons.badge_outlined,
-            title: 'Account Type & Marketplace Role',
-            subtitle:
-                'Manage whether you use Belagavi Property as Buyer, Seller, Broker, or Builder',
-            iconColor: AppDesignSystem.brandGold,
-            onTap: () => _showRoleManagementModal(context, ref),
-          ),
-          const _BiometricSettingTile(),
-
-          if (isSignedIn) ...[
-            const SizedBox(height: 12),
-            _InteractiveActionTile(
-              icon: Icons.logout_rounded,
-              title: 'Logout',
-              subtitle: 'Sign out of Belagavi Property session',
-              iconColor: Colors.redAccent,
-              isDestructive: true,
-              onTap: () async {
-                await AuthSessionStorageHelper.logout();
-                if (context.mounted) {
-                  context.go('/auth');
-                }
-              },
-            ),
-          ],
-
-          const SizedBox(height: 32),
-        ],
+        ),
       ),
     );
   }
@@ -543,7 +792,7 @@ class UserProfileView extends ConsumerWidget {
   }
 }
 
-class _InteractiveActionTile extends StatefulWidget {
+class _InteractiveActionTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -561,89 +810,78 @@ class _InteractiveActionTile extends StatefulWidget {
   });
 
   @override
-  State<_InteractiveActionTile> createState() => _InteractiveActionTileState();
-}
-
-class _InteractiveActionTileState extends State<_InteractiveActionTile> {
-  bool _isPressed = false;
-
-  @override
   Widget build(BuildContext context) {
     final cardBg = AppDesignSystem.cardBg(context);
     final textP = AppDesignSystem.textP(context);
     final textS = AppDesignSystem.textS(context);
     final borderCol = AppDesignSystem.borderCol(context);
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) => setState(() => _isPressed = false),
-      onTapCancel: () => setState(() => _isPressed = false),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        widget.onTap();
-      },
-      child: AnimatedScale(
-        scale: _isPressed ? 0.98 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: widget.isDestructive ? const Color(0xFFFFF1F2) : cardBg,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: widget.isDestructive ? const Color(0xFFFECDD3) : borderCol,
-              width: 1.2,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDestructive ? const Color(0xFFFFF1F2) : cardBg,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isDestructive ? const Color(0xFFFECDD3) : borderCol,
+          width: 1.2,
+        ),
+        boxShadow: AppDesignSystem.cardShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            HapticFeedback.lightImpact();
+            onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontFamily: AppDesignSystem.fontFamily,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isDestructive ? const Color(0xFFBE123C) : textP,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontFamily: AppDesignSystem.fontFamily,
+                          fontSize: 11.5,
+                          color: isDestructive ? const Color(0xFFE11D48) : textS,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: isDestructive ? const Color(0xFFFDA4AF) : textS,
+                ),
+              ],
             ),
-            boxShadow: AppDesignSystem.cardShadow,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: widget.iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(widget.icon, color: widget.iconColor, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontFamily: AppDesignSystem.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: widget.isDestructive
-                            ? const Color(0xFFBE123C)
-                            : textP,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.subtitle,
-                      style: TextStyle(
-                        fontFamily: AppDesignSystem.fontFamily,
-                        fontSize: 11.5,
-                        color: widget.isDestructive
-                            ? const Color(0xFFE11D48)
-                            : textS,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 14,
-                color: widget.isDestructive ? const Color(0xFFFDA4AF) : textS,
-              ),
-            ],
           ),
         ),
       ),
@@ -671,14 +909,20 @@ class _BiometricSettingTileState extends State<_BiometricSettingTile> {
   }
 
   Future<void> _loadBiometricState() async {
-    final available = await _biometricService.isBiometricAvailable();
-    final enabled = AuthSessionStorageHelper.isBiometricEnabled();
-    if (mounted) {
-      setState(() {
-        _isAvailable = available;
-        _isEnabled = enabled;
-        _isLoading = false;
-      });
+    try {
+      final available = await _biometricService.isBiometricAvailable();
+      final enabled = AuthSessionStorageHelper.isBiometricEnabled();
+      if (mounted) {
+        setState(() {
+          _isAvailable = available;
+          _isEnabled = enabled;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -738,21 +982,55 @@ class _BiometricSettingTileState extends State<_BiometricSettingTile> {
     if (_isLoading) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: borderCol),
+          border: Border.all(color: borderCol, width: 1.2),
+          boxShadow: AppDesignSystem.cardShadow,
         ),
-        child: const Center(
-          child: SizedBox(
-            height: 20,
-            width: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppDesignSystem.brandGold,
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppDesignSystem.brandGold.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.fingerprint_rounded,
+                color: AppDesignSystem.brandGold,
+                size: 24,
+              ),
             ),
-          ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Biometric Quick Unlock',
+                    style: TextStyle(
+                      fontFamily: AppDesignSystem.fontFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: textP,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Checking sensor availability...',
+                    style: TextStyle(
+                      fontFamily: AppDesignSystem.fontFamily,
+                      fontSize: 11.5,
+                      color: textS,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -812,11 +1090,15 @@ class _BiometricSettingTileState extends State<_BiometricSettingTile> {
             ),
           ),
           if (_isAvailable)
-            Switch.adaptive(
-              key: const ValueKey('switch_biometric'),
-              value: _isEnabled,
-              activeColor: AppDesignSystem.brandGold,
-              onChanged: _toggleBiometric,
+            SizedBox(
+              width: 52,
+              height: 32,
+              child: Switch(
+                key: const ValueKey('switch_biometric'),
+                value: _isEnabled,
+                activeThumbColor: AppDesignSystem.brandGold,
+                onChanged: _toggleBiometric,
+              ),
             ),
         ],
       ),
@@ -825,7 +1107,7 @@ class _BiometricSettingTileState extends State<_BiometricSettingTile> {
 }
 
 void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
-  final currentRoleStr = AuthSessionStorageHelper.getUserRole() ?? 'buyer';
+  final currentRoleStr = AuthSessionStorageHelper.getUserRole();
   final currentRole = UserRoleEnum.values.firstWhere(
     (e) => e.name.toLowerCase() == currentRoleStr.toLowerCase(),
     orElse: () => UserRoleEnum.buyer,
@@ -929,8 +1211,8 @@ void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Select your primary account mode. You can switch anytime.',
-                  style: TextStyle(fontSize: 13, color: textS),
+                  'Select how you interact with Belagavi Property. Role determines available features and dashboards.',
+                  style: TextStyle(fontSize: 12, color: textS),
                 ),
                 const SizedBox(height: 16),
                 Flexible(
@@ -941,28 +1223,25 @@ void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
                     itemBuilder: (ctx, idx) {
                       final item = roles[idx];
                       final role = item['role'] as UserRoleEnum;
-                      final isSelected = currentRole == role;
+                      final isSelected = role == currentRole;
 
                       return InkWell(
+                        borderRadius: BorderRadius.circular(16),
                         onTap: () async {
-                          ref
-                              .read(authNotifierProvider.notifier)
-                              .switchRole(role);
                           await AuthSessionStorageHelper.setUserRole(role.name);
-                          if (ctx.mounted) {
-                            Navigator.of(ctx).pop();
+                          if (context.mounted) {
+                            Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Account role updated to ${item['title']}',
+                                  'Switched to ${item['title']}',
                                 ),
-                                backgroundColor: const Color(0xFF16A34A),
+                                backgroundColor: AppDesignSystem.brandGold,
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
                           }
                         },
-                        borderRadius: BorderRadius.circular(16),
                         child: Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
@@ -981,14 +1260,24 @@ void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
                           ),
                           child: Row(
                             children: [
-                              Icon(
-                                item['icon'] as IconData,
-                                color: isSelected
-                                    ? AppDesignSystem.brandGold
-                                    : textS,
-                                size: 24,
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? AppDesignSystem.brandGold
+                                      : Colors.grey.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  item['icon'] as IconData,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppDesignSystem.brandGold,
+                                  size: 20,
+                                ),
                               ),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -996,8 +1285,9 @@ void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
                                     Text(
                                       item['title'] as String,
                                       style: TextStyle(
+                                        fontFamily: AppDesignSystem.fontFamily,
+                                        fontSize: 13.5,
                                         fontWeight: FontWeight.w700,
-                                        fontSize: 14,
                                         color: isSelected
                                             ? AppDesignSystem.brandGold
                                             : textP,
@@ -1007,7 +1297,7 @@ void _showRoleManagementModal(BuildContext context, WidgetRef ref) {
                                     Text(
                                       item['subtitle'] as String,
                                       style: TextStyle(
-                                        fontSize: 11.5,
+                                        fontSize: 11,
                                         color: textS,
                                       ),
                                     ),
@@ -1129,7 +1419,7 @@ class _AccountVerificationDetailsCardState
     final isGoogleLinked = providers.contains('google.com');
     final isAppleLinked = providers.contains('apple.com');
     final isPhoneLinked =
-        (user?.phoneNumber != null && user!.phoneNumber!.isNotEmpty) ||
+        (widget.phoneNumber != null && widget.phoneNumber!.isNotEmpty) ||
         providers.contains('phone');
 
     return Container(
@@ -1217,37 +1507,65 @@ class _AccountVerificationDetailsCardState
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton.icon(
-                    onPressed: _sendVerificationEmail,
-                    icon: const Icon(Icons.send_rounded, size: 14),
-                    label: const Text(
-                      'Verify Email',
-                      style: TextStyle(fontSize: 11),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: _sendVerificationEmail,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.send_rounded, size: 14, color: AppDesignSystem.brandGold),
+                            SizedBox(width: 4),
+                            Text(
+                              'Verify Email',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppDesignSystem.brandGold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: _isReloading ? null : _refreshVerificationStatus,
-                    icon: const Icon(Icons.refresh_rounded, size: 14),
-                    label: const Text(
-                      'Refresh Status',
-                      style: TextStyle(fontSize: 11),
-                    ),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: _isReloading ? null : _refreshVerificationStatus,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.refresh_rounded,
+                              size: 14,
+                              color: _isReloading ? Colors.grey : AppDesignSystem.brandGold,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Refresh Status',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: _isReloading ? Colors.grey : AppDesignSystem.brandGold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                 ],

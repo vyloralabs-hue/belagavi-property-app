@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../domain/entities/property_entities.dart';
 import '../../domain/repositories/property_repository.dart';
+import '../../../property_search/utils/india_location_directory.dart';
 
 enum PropertyFormStatus {
   initial,
@@ -27,6 +28,7 @@ class PropertyFormState extends Equatable {
   final PropertySubtype type;
   final String listingType; // 'FOR_SALE', 'FOR_RENT', 'LEASE'
   final ListingStatus listingStatus;
+  final VerificationStatus verificationStatus;
   final double price;
   final bool isNegotiable;
   // ─── Rent / Lease specific fields ───────────────────────────────────────────
@@ -95,6 +97,7 @@ class PropertyFormState extends Equatable {
     this.type = PropertySubtype.apartment,
     this.listingType = 'FOR_SALE',
     this.listingStatus = ListingStatus.draft,
+    this.verificationStatus = VerificationStatus.pending,
     this.price = 0.0,
     this.isNegotiable = true,
     this.securityDeposit = 0.0,
@@ -159,6 +162,7 @@ class PropertyFormState extends Equatable {
     PropertySubtype? type,
     String? listingType,
     ListingStatus? listingStatus,
+    VerificationStatus? verificationStatus,
     double? price,
     bool? isNegotiable,
     double? securityDeposit,
@@ -222,6 +226,7 @@ class PropertyFormState extends Equatable {
       type: type ?? this.type,
       listingType: listingType ?? this.listingType,
       listingStatus: listingStatus ?? this.listingStatus,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
       price: price ?? this.price,
       isNegotiable: isNegotiable ?? this.isNegotiable,
       securityDeposit: securityDeposit ?? this.securityDeposit,
@@ -276,16 +281,15 @@ class PropertyFormState extends Equatable {
   }
 
   PropertyEntity toEntity(String ownerId) {
-    final effectiveId = id.isEmpty ? 'prop_${DateTime.now().millisecondsSinceEpoch}' : id;
     return PropertyEntity(
-      id: effectiveId,
+      id: id,
       ownerId: ownerId,
       title: title,
       description: description,
       category: category,
       type: type,
       status: listingStatus,
-      verificationStatus: VerificationStatus.pending,
+      verificationStatus: verificationStatus,
       price: price,
       isNegotiable: isNegotiable,
       specifications: specifications,
@@ -353,6 +357,34 @@ class PropertyFormState extends Equatable {
           if (waterSupply != null && waterSupply!.isNotEmpty) 'waterSupply': waterSupply,
         },
       },
+      isPaused: (status == PropertyFormStatus.editing || id.isNotEmpty)
+          ? listingStatus == ListingStatus.paused
+          : false,
+      isFeatured: false,
+      listingAccessType: (category == PropertyCategory.commercial ||
+              category == PropertyCategory.industrial ||
+              type == PropertySubtype.commercialPlot ||
+              type == PropertySubtype.commercialOffice ||
+              type == PropertySubtype.commercialShop ||
+              type == PropertySubtype.commercialShowroom ||
+              type == PropertySubtype.warehouse ||
+              type == PropertySubtype.warehouseGodown ||
+              type == PropertySubtype.industrialLand)
+          ? 'commercial_paid'
+          : 'free_residential',
+      listingAccessStartedAt: DateTime.now(),
+      freeListingExpiresAt: (category == PropertyCategory.commercial ||
+              category == PropertyCategory.industrial ||
+              type == PropertySubtype.commercialPlot ||
+              type == PropertySubtype.commercialOffice ||
+              type == PropertySubtype.commercialShop ||
+              type == PropertySubtype.commercialShowroom ||
+              type == PropertySubtype.warehouse ||
+              type == PropertySubtype.warehouseGodown ||
+              type == PropertySubtype.industrialLand)
+          ? null
+          : DateTime.now().add(const Duration(days: 15)),
+      isGrandfathered: false,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -429,8 +461,12 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
 
   PropertyFormNotifier(this._repository) : super(const PropertyFormState());
 
-  void initForNewProperty(String ownerId) {
-    state = PropertyFormState(ownerId: ownerId);
+  void initForNewProperty(String ownerId, [String? explicitId]) {
+    state = PropertyFormState(id: explicitId ?? '', ownerId: ownerId);
+  }
+
+  void setPropertyId(String id) {
+    state = state.copyWith(id: id);
   }
 
   void initForEditing(PropertyEntity property) {
@@ -453,6 +489,7 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
       type: property.type,
       listingType: resolvedListingType,
       listingStatus: property.status,
+      verificationStatus: property.verificationStatus,
       price: property.price,
       isNegotiable: property.isNegotiable,
       securityDeposit: (property.features['securityDeposit'] as num?)?.toDouble() ?? 0.0,
@@ -577,13 +614,28 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
     double? latitude,
     double? longitude,
   }) {
+    final effectiveCity = city ?? state.city;
+    final normCity = effectiveCity.isNotEmpty
+        ? IndiaLocationDirectory.normalizeCityName(effectiveCity)
+        : effectiveCity;
+
+    final effectiveLoc = locality ?? state.locality;
+    final normLoc = effectiveLoc.isNotEmpty
+        ? IndiaLocationDirectory.normalizeLocalityName(effectiveLoc, normCity)
+        : effectiveLoc;
+
+    final effectiveState = stateName ?? state.state;
+    final normState = effectiveState.isNotEmpty
+        ? IndiaLocationDirectory.normalizeStateName(effectiveState)
+        : effectiveState;
+
     state = state.copyWith(
       country: country ?? state.country,
-      state: stateName ?? state.state,
-      district: district ?? state.district,
-      taluk: taluk ?? state.taluk,
-      city: city ?? state.city,
-      locality: locality ?? state.locality,
+      state: normState,
+      district: district ?? (normCity.isNotEmpty ? normCity : state.district),
+      taluk: taluk ?? (normCity.isNotEmpty ? normCity : state.taluk),
+      city: normCity,
+      locality: normLoc,
       address: address ?? state.address,
       pincode: pincode ?? state.pincode,
       latitude: latitude ?? state.latitude,
@@ -929,9 +981,12 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
 
       case 2: // Step 3: Location
         if (state.locality.trim().isEmpty) {
-          errors['locality'] = 'Locality / Area is required';
+          errors['locality'] = 'Locality / Village / Area is required';
         }
-        if (state.city.trim().isEmpty) {
+        final isRuralOrLand = state.category == PropertyCategory.land ||
+            state.category == PropertyCategory.plotLand ||
+            state.type == PropertySubtype.agriculturalLand;
+        if (!isRuralOrLand && state.city.trim().isEmpty) {
           errors['city'] = 'City is required';
         }
         break;
@@ -995,10 +1050,15 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
   }
 
   Future<bool> saveDraft(String authenticatedUserId) async {
-    state = state.copyWith(status: PropertyFormStatus.saving, listingStatus: ListingStatus.draft);
+    final isExistingRemote = state.id.isNotEmpty && state.id.contains('-');
+    final targetListingStatus = (isExistingRemote && state.listingStatus != ListingStatus.draft)
+        ? state.listingStatus
+        : ListingStatus.draft;
+
+    state = state.copyWith(status: PropertyFormStatus.saving, listingStatus: targetListingStatus);
     final entity = state.toEntity(authenticatedUserId);
 
-    final result = state.id.isEmpty
+    final result = !isExistingRemote
         ? await _repository.createProperty(entity, authenticatedUserId: authenticatedUserId)
         : await _repository.updateProperty(entity, authenticatedUserId: authenticatedUserId);
 
@@ -1011,7 +1071,7 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
         state = state.copyWith(
           id: savedEntity.id,
           status: PropertyFormStatus.saved,
-          listingStatus: ListingStatus.draft,
+          listingStatus: savedEntity.status,
         );
         return true;
       },
@@ -1021,13 +1081,21 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
   Future<bool> submitProperty(String authenticatedUserId) async {
     if (!validateStep(7)) return false;
 
+    final isExistingRemote = state.id.isNotEmpty && state.id.contains('-');
+    // For existing live/reviewed listings, retain existing status without forced transition to submitted
+    final targetStatus = (isExistingRemote &&
+            state.listingStatus != ListingStatus.draft &&
+            state.listingStatus != ListingStatus.rejected)
+        ? state.listingStatus
+        : ListingStatus.submitted;
+
     state = state.copyWith(
       status: PropertyFormStatus.submitting,
-      listingStatus: ListingStatus.submitted,
+      listingStatus: targetStatus,
     );
 
     final entity = state.toEntity(authenticatedUserId);
-    final result = state.id.isEmpty
+    final result = !isExistingRemote
         ? await _repository.createProperty(entity, authenticatedUserId: authenticatedUserId)
         : await _repository.updateProperty(entity, authenticatedUserId: authenticatedUserId);
 
@@ -1040,7 +1108,7 @@ class PropertyFormNotifier extends StateNotifier<PropertyFormState> {
         state = state.copyWith(
           id: submittedEntity.id,
           status: PropertyFormStatus.submitted,
-          listingStatus: ListingStatus.submitted,
+          listingStatus: submittedEntity.status,
         );
         return true;
       },

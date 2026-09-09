@@ -76,6 +76,19 @@ class DisputeRepositoryImpl extends BaseRepository implements DisputeRepository 
   }
 
   @override
+  FutureEither<PropertyDisputeEntity> updateDispute(
+    PropertyDisputeEntity dispute, {
+    required String authenticatedUserId,
+    UserRole? userRole,
+  }) async {
+    return safeCall(() => _remoteDataSource.updateDispute(
+      dispute,
+      authenticatedUserId: authenticatedUserId,
+      userRole: userRole,
+    ));
+  }
+
+  @override
   FutureEither<PropertyDisputeEntity> updateDisputeStatus({
     required String disputeId,
     required DisputeVerificationStatus newStatus,
@@ -142,11 +155,13 @@ class DisputeRepositoryImpl extends BaseRepository implements DisputeRepository 
     required String disputeId,
     required String fileName,
     required Uint8List fileBytes,
+    String? authenticatedUserId,
   }) async {
     return safeCall(() => _remoteDataSource.uploadDisputeDocumentFile(
       disputeId: disputeId,
       fileName: fileName,
       fileBytes: fileBytes,
+      authenticatedUserId: authenticatedUserId,
     ));
   }
 }

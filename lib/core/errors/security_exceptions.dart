@@ -1,9 +1,10 @@
+import '../error/exceptions.dart';
+
 /// Security Exception thrown when a user attempts an unauthorized operation
-class AccessDeniedException implements Exception {
-  final String message;
+class AccessDeniedException extends AppException {
   final String? code;
 
-  const AccessDeniedException(this.message, {this.code});
+  const AccessDeniedException(String message, {this.code}) : super(message, 403);
 
   @override
   String toString() => 'AccessDeniedException: $message${code != null ? ' (Code: $code)' : ''}';

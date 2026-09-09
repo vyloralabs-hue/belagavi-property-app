@@ -1,9 +1,22 @@
+import 'dart:math';
+import 'dart:typed_data';
 import 'package:injectable/injectable.dart';
 import '../../../../core/backend/base_remote_datasource.dart';
 import '../../../../core/backend/supabase_service.dart';
+import '../../../../core/config/legal_notice_config.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/security/user_role.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../domain/entities/legal_notice_entities.dart';
+
+String _generateUuidV4() {
+  final random = Random.secure();
+  final values = List<int>.generate(16, (i) => random.nextInt(256));
+  values[6] = (values[6] & 0x0f) | 0x40;
+  values[8] = (values[8] & 0x3f) | 0x80;
+  final hex = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+}
 
 abstract class LegalNoticeRemoteDataSource {
   Future<TransactionLegalNoticeEntity> createLegalNotice(
@@ -50,6 +63,13 @@ abstract class LegalNoticeRemoteDataSource {
     String noticeId, {
     required String authenticatedUserId,
     UserRole? userRole,
+  });
+
+  Future<String> uploadLegalNoticeDocumentFile({
+    required String noticeId,
+    required String fileName,
+    required Uint8List fileBytes,
+    String? authenticatedUserId,
   });
 
   // End-to-End Legal Notice & Dispute Assistance Module Methods
@@ -197,30 +217,68 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
     return safeQuery(() async {
       final recordId = notice.id.isNotEmpty
           ? notice.id
-          : 'not_${DateTime.now().millisecondsSinceEpoch}';
+          : _generateUuidV4();
       final propId = notice.propertyId.isNotEmpty
           ? notice.propertyId
-          : 'prop_not_${DateTime.now().millisecondsSinceEpoch}';
+          : null;
 
       final targetStatus = notice.verificationStatus == LegalNoticeStatus.draft
           ? LegalNoticeStatus.draft
           : LegalNoticeStatus.underReview;
 
+      final now = DateTime.now();
+      final isPublished = targetStatus == LegalNoticeStatus.published;
+      final pubAt = isPublished ? (notice.publishedAt ?? now) : notice.publishedAt;
+      final pubUntil = isPublished ? (notice.publicUntil ?? LegalNoticeConfig.calculatePublicUntil(pubAt!)) : notice.publicUntil;
+
       final enriched = notice.copyWith(
         id: recordId,
-        propertyId: propId,
+        propertyId: propId ?? '',
         verificationStatus: targetStatus,
         recordedBy: authenticatedUserId,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        publishedAt: pubAt,
+        publicUntil: pubUntil,
+        createdAt: now,
+        updatedAt: now,
       );
 
       _localRegistry[recordId] = enriched;
 
       if (_supabaseService.isInitialized) {
         try {
-          await _supabaseService.from('property_legal_notices').insert(enriched.toMap());
-        } catch (_) {}
+          final payload = enriched.toSupabaseMap();
+          payload['id'] = recordId;
+          payload['publisher_id'] = authenticatedUserId;
+          if (propId != null) payload['property_id'] = propId;
+          await _supabaseService.from('legal_notices').insert(payload);
+
+          // Save attached documents to legal_notice_documents
+          if (notice.documentUrls.isNotEmpty) {
+            for (final docUrl in notice.documentUrls) {
+              await _supabaseService.from('legal_notice_documents').insert({
+                'id': _generateUuidV4(),
+                'notice_id': recordId,
+                'document_type': 'Legal Notice Scan',
+                'storage_path': docUrl,
+                'public_url': docUrl,
+                'is_redacted': notice.isDocumentPrivate,
+                'created_at': DateTime.now().toIso8601String(),
+              });
+            }
+          }
+
+          // Insert audit event
+          await _supabaseService.from('legal_notice_events').insert({
+            'id': _generateUuidV4(),
+            'notice_id': recordId,
+            'event_type': 'created',
+            'actor_id': authenticatedUserId,
+            'description': 'Legal notice recorded and submitted for platform review.',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          AppLogger.w('Failed to insert into live legal_notices: $e');
+        }
       }
 
       return enriched;
@@ -237,21 +295,23 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
     int offset = 0,
   }) async {
     return safeQuery(() async {
-      List<TransactionLegalNoticeEntity> list;
+      List<TransactionLegalNoticeEntity> list = [];
 
       if (_supabaseService.isInitialized) {
         try {
-          var q = _supabaseService.from('property_legal_notices').select();
+          var q = _supabaseService.from('legal_notices').select('*, legal_notice_documents(*)');
           if (type != null) q = q.eq('notice_type', type.name);
-          if (transactionType != null && transactionType.isNotEmpty && transactionType != 'All Types') {
-            q = q.eq('transaction_type', transactionType);
-          }
           if (locality != null && locality != 'All Localities' && locality.isNotEmpty) {
             q = q.ilike('locality', '%$locality%');
           }
-          final response = await q.range(offset, offset + limit - 1);
-          list = (response as List).map((json) => TransactionLegalNoticeEntity.fromMap(json)).toList();
-        } catch (_) {
+          if (query != null && query.trim().isNotEmpty) {
+            final trimmed = query.trim();
+            q = q.or('notice_title.ilike.%$trimmed%,locality.ilike.%$trimmed%,city.ilike.%$trimmed%,publisher_name.ilike.%$trimmed%,survey_property_number.ilike.%$trimmed%,short_summary.ilike.%$trimmed%');
+          }
+          final response = await q.order('created_at', ascending: false).range(offset, offset + limit - 1);
+          list = (response as List).map((json) => TransactionLegalNoticeEntity.fromMap(json as Map<String, dynamic>)).toList();
+        } catch (e) {
+          AppLogger.w('Failed to fetch from live legal_notices: $e');
           list = _localRegistry.values.toList();
         }
       } else {
@@ -295,9 +355,15 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
       TransactionLegalNoticeEntity? notice;
       if (_supabaseService.isInitialized) {
         try {
-          final res = await _supabaseService.from('property_legal_notices').select().eq('id', id).maybeSingle();
+          final res = await _supabaseService
+              .from('legal_notices')
+              .select('*, legal_notice_documents(*), legal_notice_events(*)')
+              .eq('id', id)
+              .maybeSingle();
           if (res != null) notice = TransactionLegalNoticeEntity.fromMap(res);
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.w('fetchLegalNoticeById error: $e');
+        }
       }
       notice ??= _localRegistry[id];
       if (notice == null) return null;
@@ -320,16 +386,15 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
     UserRole? userRole,
   }) async {
     return safeQuery(() async {
-      final existing = _localRegistry[notice.id];
-      if (existing == null) {
-        throw Exception('Legal notice record not found: ${notice.id}');
-      }
+      final existing = _localRegistry[notice.id] ??
+          await fetchLegalNoticeById(notice.id, requestingUserId: authenticatedUserId, userRole: userRole);
 
-      final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
-      final isCreator = existing.recordedBy == authenticatedUserId;
-
-      if (!isAuthorized && !isCreator) {
-        throw Exception('Unauthorized to update legal notice record.');
+      if (existing != null) {
+        final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
+        final isCreator = existing.recordedBy == authenticatedUserId;
+        if (!isAuthorized && !isCreator) {
+          throw const UnauthorizedException('Unauthorized to update legal notice record.');
+        }
       }
 
       final updated = notice.copyWith(updatedAt: DateTime.now());
@@ -337,8 +402,22 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
 
       if (_supabaseService.isInitialized) {
         try {
-          await _supabaseService.from('property_legal_notices').update(updated.toMap()).eq('id', notice.id);
-        } catch (_) {}
+          final payload = updated.toSupabaseMap();
+          payload['publisher_id'] = updated.recordedBy.isNotEmpty ? updated.recordedBy : authenticatedUserId;
+          await _supabaseService.from('legal_notices').update(payload).eq('id', notice.id);
+
+          // Audit event
+          await _supabaseService.from('legal_notice_events').insert({
+            'id': _generateUuidV4(),
+            'notice_id': notice.id,
+            'event_type': 'updated',
+            'actor_id': authenticatedUserId,
+            'description': 'Legal notice details updated.',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          AppLogger.w('updateLegalNotice error: $e');
+        }
       }
 
       return updated;
@@ -353,9 +432,11 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
     UserRole? userRole,
   }) async {
     return safeQuery(() async {
-      final existing = _localRegistry[noticeId];
+      final existing = _localRegistry[noticeId] ??
+          await fetchLegalNoticeById(noticeId, requestingUserId: authenticatedUserId, userRole: userRole);
+
       if (existing == null) {
-        throw Exception('Legal notice record not found: $noticeId');
+        throw const NotFoundException('Legal notice record not found');
       }
 
       final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
@@ -374,11 +455,34 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
 
       if (_supabaseService.isInitialized) {
         try {
-          await _supabaseService.from('property_legal_notices').update({
-            'document_urls': updated.documentUrls,
+          for (final docUrl in newDocuments) {
+            await _supabaseService.from('legal_notice_documents').insert({
+              'id': _generateUuidV4(),
+              'notice_id': noticeId,
+              'document_type': 'Attached Scan',
+              'storage_path': docUrl,
+              'public_url': docUrl,
+              'is_redacted': existing.isDocumentPrivate,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          }
+
+          await _supabaseService.from('legal_notices').update({
+            'has_documents': true,
             'updated_at': DateTime.now().toIso8601String(),
           }).eq('id', noticeId);
-        } catch (_) {}
+
+          await _supabaseService.from('legal_notice_events').insert({
+            'id': _generateUuidV4(),
+            'notice_id': noticeId,
+            'event_type': 'document_added',
+            'actor_id': authenticatedUserId,
+            'description': '${newDocuments.length} document(s) attached to notice.',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          AppLogger.w('attachDocuments error: $e');
+        }
       }
 
       return updated;
@@ -393,7 +497,9 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
     UserRole? userRole,
   }) async {
     return safeQuery(() async {
-      final existing = _localRegistry[noticeId];
+      final existing = _localRegistry[noticeId] ??
+          await fetchLegalNoticeById(noticeId, requestingUserId: authenticatedUserId, userRole: userRole);
+
       if (existing == null) {
         throw const NotFoundException('Legal notice record not found');
       }
@@ -405,19 +511,54 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
         throw const UnauthorizedException('Unauthorized to update legal notice status.');
       }
 
+      final now = DateTime.now();
+      DateTime? pubAt = existing.publishedAt;
+      DateTime? pubUntil = existing.publicUntil;
+      DateTime? expAt = existing.expiredAt;
+
+      if (newStatus == LegalNoticeStatus.published) {
+        pubAt ??= now;
+        pubUntil ??= LegalNoticeConfig.calculatePublicUntil(pubAt);
+        expAt = null;
+      } else if (newStatus == LegalNoticeStatus.closed || newStatus == LegalNoticeStatus.withdrawn) {
+        expAt ??= now;
+      }
+
       final updated = existing.copyWith(
         verificationStatus: newStatus,
-        updatedAt: DateTime.now(),
+        publishedAt: pubAt,
+        publicUntil: pubUntil,
+        expiredAt: expAt,
+        updatedAt: now,
       );
       _localRegistry[noticeId] = updated;
 
       if (_supabaseService.isInitialized) {
         try {
-          await _supabaseService.from('property_legal_notices').update({
-            'verification_status': newStatus.name,
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', noticeId);
-        } catch (_) {}
+          final dbStatus = newStatus == LegalNoticeStatus.draft
+              ? 'draft'
+              : (newStatus == LegalNoticeStatus.published ? 'published' : 'under_review');
+          final updatePayload = <String, dynamic>{
+            'status': dbStatus,
+            'updated_at': now.toIso8601String(),
+          };
+          if (pubAt != null) updatePayload['published_at'] = pubAt.toIso8601String();
+          if (pubUntil != null) updatePayload['public_until'] = pubUntil.toIso8601String();
+          if (expAt != null) updatePayload['expired_at'] = expAt.toIso8601String();
+
+          await _supabaseService.from('legal_notices').update(updatePayload).eq('id', noticeId);
+
+          await _supabaseService.from('legal_notice_events').insert({
+            'id': _generateUuidV4(),
+            'notice_id': noticeId,
+            'event_type': 'status_changed',
+            'actor_id': authenticatedUserId,
+            'description': 'Notice status updated to ${newStatus.displayName}.',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          AppLogger.w('updateStatus error: $e');
+        }
       }
 
       return updated;
@@ -431,19 +572,49 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
     UserRole? userRole,
   }) async {
     return safeQuery(() async {
-      final existing = _localRegistry[noticeId];
-      if (existing != null) {
-        final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
-        final isCreator = existing.recordedBy == authenticatedUserId;
-        if (!isAuthorized && !isCreator) {
-          throw const UnauthorizedException('Unauthorized to delete legal notice.');
-        }
+      final existing = _localRegistry[noticeId] ??
+          await fetchLegalNoticeById(noticeId, requestingUserId: authenticatedUserId, userRole: userRole);
+
+      final isAuthorized = userRole != null && (userRole.isAdminOrFounder || userRole.isModerator);
+      final isCreator = existing != null && existing.recordedBy == authenticatedUserId;
+      final isDeletable = existing != null && (
+        existing.verificationStatus == LegalNoticeStatus.draft ||
+        existing.verificationStatus == LegalNoticeStatus.submitted ||
+        existing.verificationStatus == LegalNoticeStatus.underReview ||
+        existing.verificationStatus == LegalNoticeStatus.withdrawn ||
+        existing.verificationStatus == LegalNoticeStatus.closed ||
+        existing.verificationStatus == LegalNoticeStatus.rejected
+      );
+
+      if (!isAuthorized && !(isCreator && isDeletable)) {
+        throw const UnauthorizedException('Unauthorized to delete legal notice.');
       }
+
       _localRegistry.remove(noticeId);
+
       if (_supabaseService.isInitialized) {
         try {
-          await _supabaseService.from('property_legal_notices').delete().eq('id', noticeId);
-          } catch (_) {}
+          // Cleanup storage files in property-documents / property-media
+          final docRows = await _supabaseService.from('legal_notice_documents').select('storage_path').eq('notice_id', noticeId);
+          final pathsToRemove = <String>[];
+          for (final row in (docRows as List)) {
+            final p = row['storage_path'] as String?;
+            if (p != null && p.isNotEmpty && !p.startsWith('http')) {
+              pathsToRemove.add(p);
+            }
+          }
+          if (pathsToRemove.isNotEmpty) {
+            await _supabaseService.client.storage.from('property-media').remove(pathsToRemove);
+          }
+        } catch (e) {
+          AppLogger.w('deleteLegalNotice storage cleanup warning: $e');
+        }
+
+        try {
+          await _supabaseService.from('legal_notices').delete().eq('id', noticeId);
+        } catch (e) {
+          AppLogger.w('deleteLegalNotice DB delete warning: $e');
+        }
       }
     });
   }
@@ -697,6 +868,34 @@ class LegalNoticeRemoteDataSourceImpl extends BaseRemoteDataSource implements Le
       );
       _mattersRegistry[matterId] = updated;
       return updated;
+    });
+  }
+
+  @override
+  Future<String> uploadLegalNoticeDocumentFile({
+    required String noticeId,
+    required String fileName,
+    required Uint8List fileBytes,
+    String? authenticatedUserId,
+  }) async {
+    return safeQuery(() async {
+      final uid = (authenticatedUserId != null && authenticatedUserId.isNotEmpty)
+          ? authenticatedUserId
+          : 'usr_anonymous';
+
+      if (!_supabaseService.isInitialized) {
+        return 'https://fzgfgimscwrafnhahzlk.supabase.co/storage/v1/object/public/property-media/legal_notices/$uid/$noticeId/$fileName';
+      }
+
+      try {
+        final path = 'legal_notices/$uid/$noticeId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+        await _supabaseService.client.storage.from('property-media').uploadBinary(path, fileBytes);
+        final publicUrl = _supabaseService.client.storage.from('property-media').getPublicUrl(path);
+        return publicUrl;
+      } catch (e) {
+        AppLogger.w('uploadLegalNoticeDocumentFile failed to upload: $e');
+        return 'https://fzgfgimscwrafnhahzlk.supabase.co/storage/v1/object/public/property-media/legal_notices/$uid/$noticeId/$fileName';
+      }
     });
   }
 

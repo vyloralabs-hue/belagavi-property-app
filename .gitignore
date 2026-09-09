@@ -77,3 +77,8 @@ app.*.map.json
 # iOS build outputs
 ios/Pods/
 ios/Runner.xcworkspace/
+
+# Scratch & Temporary
+scratch/
+test/scratch_*
+supabase/.temp/

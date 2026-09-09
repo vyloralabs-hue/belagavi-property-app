@@ -1,4 +1,5 @@
 import '../domain/entities/property_entities.dart';
+import 'owner_identity_bridge.dart';
 
 class PropertyUnlockGuard {
   PropertyUnlockGuard._();
@@ -14,7 +15,10 @@ class PropertyUnlockGuard {
     }
 
     // Property Owner always has access to full protected details of their own property
-    if (requestingUserId == property.ownerId) {
+    if (OwnerIdentityBridge.isOwnerSync(
+      callerId: requestingUserId,
+      propertyOwnerId: property.ownerId,
+    )) {
       return true;
     }
 

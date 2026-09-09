@@ -185,6 +185,23 @@ class PropertyRepositoryImpl extends BaseRepository implements PropertyRepositor
   }
 
   @override
+  FutureEither<PropertyEntity> setPropertyPaused({
+    required String propertyId,
+    required bool isPaused,
+    required String authenticatedUserId,
+    UserRole? userRole,
+  }) async {
+    return safeCall(
+      () => _remoteDataSource.setPropertyPaused(
+        propertyId: propertyId,
+        isPaused: isPaused,
+        authenticatedUserId: authenticatedUserId,
+        userRole: userRole,
+      ),
+    );
+  }
+
+  @override
   FutureEither<void> deleteProperty(
     String id, {
     required String authenticatedUserId,

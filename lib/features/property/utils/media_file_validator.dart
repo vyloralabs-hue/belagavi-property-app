@@ -15,8 +15,8 @@ class MediaFileValidator {
   static const int maxVideoSizeBytes = 100 * 1024 * 1024; // 100 MB
   static const int maxDocumentSizeBytes = 25 * 1024 * 1024; // 25 MB
 
-  static const List<String> allowedImageExtensions = ['jpg', 'jpeg', 'png', 'webp'];
-  static const List<String> allowedVideoExtensions = ['mp4', 'mov'];
+  static const List<String> allowedImageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'jfif'];
+  static const List<String> allowedVideoExtensions = ['mp4', 'mov', 'webm', 'm4v'];
   static const List<String> allowedDocumentExtensions = ['pdf'];
 
   /// Validates an image file before upload
@@ -24,8 +24,11 @@ class MediaFileValidator {
     required String fileName,
     required int fileSizeBytes,
   }) {
+    if (fileSizeBytes <= 0) {
+      throw const MediaValidationException('Image file cannot be empty.');
+    }
     final ext = _getExtension(fileName);
-    if (!allowedImageExtensions.contains(ext)) {
+    if (ext.isNotEmpty && !allowedImageExtensions.contains(ext)) {
       throw MediaValidationException(
         'Invalid image format (.$ext). Allowed formats: ${allowedImageExtensions.join(', ')}.',
       );
@@ -42,6 +45,9 @@ class MediaFileValidator {
     required String fileName,
     required int fileSizeBytes,
   }) {
+    if (fileSizeBytes <= 0) {
+      throw const MediaValidationException('Video file cannot be empty.');
+    }
     final ext = _getExtension(fileName);
     if (!allowedVideoExtensions.contains(ext)) {
       throw MediaValidationException(
@@ -60,6 +66,9 @@ class MediaFileValidator {
     required String fileName,
     required int fileSizeBytes,
   }) {
+    if (fileSizeBytes <= 0) {
+      throw const MediaValidationException('Document file cannot be empty.');
+    }
     final ext = _getExtension(fileName);
     if (!allowedDocumentExtensions.contains(ext)) {
       throw MediaValidationException(

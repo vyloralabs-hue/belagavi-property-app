@@ -14,6 +14,7 @@ class NotificationCenterView extends ConsumerStatefulWidget {
 
 class _NotificationCenterViewState extends ConsumerState<NotificationCenterView> {
   final ScrollController _scrollController = ScrollController();
+  String _selectedCategory = 'all'; // 'all', 'matches', 'watch', 'legal', 'unread'
 
   @override
   void initState() {
@@ -62,11 +63,22 @@ class _NotificationCenterViewState extends ConsumerState<NotificationCenterView>
         break;
       case NotificationType.newSavedSearchMatch:
       case NotificationType.priceDropMatch:
+      case NotificationType.propertyMatch:
         if (notification.propertyId != null && notification.propertyId!.isNotEmpty) {
           context.push('/property/${notification.propertyId}');
         } else {
-          context.push('/saved-searches');
+          context.push('/property-alerts');
         }
+        break;
+      case NotificationType.propertyWatch:
+      case NotificationType.surveyActivity:
+        context.push('/property-watch');
+        break;
+      case NotificationType.legalNoticeAlert:
+        context.push('/legal-notices');
+        break;
+      case NotificationType.disputeActivity:
+        context.push('/disputed-properties');
         break;
       case NotificationType.newChatMessage:
         context.push('/user-messages');
@@ -122,22 +134,41 @@ class _NotificationCenterViewState extends ConsumerState<NotificationCenterView>
       body: SafeArea(
         child: Column(
           children: [
-            // Filter Tabs (All / Unread)
+            // Filter Tabs (All / Matches / Property Watch / Legal Alerts / Unread)
             Container(
               height: 48,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
+              child: ListView(
+                scrollDirection: Axis.horizontal,
                 children: [
                   _buildTab(
                     label: 'All (${state.notifications.length})',
-                    isSelected: !state.unreadOnly,
-                    onTap: () => notifier.setUnreadFilter(false),
+                    isSelected: _selectedCategory == 'all',
+                    onTap: () => setState(() => _selectedCategory = 'all'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildTab(
+                    label: 'Matches',
+                    isSelected: _selectedCategory == 'matches',
+                    onTap: () => setState(() => _selectedCategory = 'matches'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildTab(
+                    label: 'Property Watch',
+                    isSelected: _selectedCategory == 'watch',
+                    onTap: () => setState(() => _selectedCategory = 'watch'),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildTab(
+                    label: 'Legal & Disputes',
+                    isSelected: _selectedCategory == 'legal',
+                    onTap: () => setState(() => _selectedCategory = 'legal'),
                   ),
                   const SizedBox(width: 8),
                   _buildTab(
                     label: 'Unread (${state.unreadCount})',
-                    isSelected: state.unreadOnly,
-                    onTap: () => notifier.setUnreadFilter(true),
+                    isSelected: _selectedCategory == 'unread',
+                    onTap: () => setState(() => _selectedCategory = 'unread'),
                   ),
                 ],
               ),
@@ -146,33 +177,59 @@ class _NotificationCenterViewState extends ConsumerState<NotificationCenterView>
 
             // Notifications List / Empty State
             Expanded(
-              child: state.isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFB39037)))
-                  : state.notifications.isEmpty
-                      ? _buildEmptyState(state.unreadOnly)
-                      : RefreshIndicator(
-                          color: const Color(0xFFB39037),
-                          backgroundColor: const Color(0xFF131922),
-                          onRefresh: () async => notifier.loadNotifications(),
-                          child: ListView.separated(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.all(16),
-                            itemCount: state.notifications.length + (state.isLoadingMore ? 1 : 0),
-                            separatorBuilder: (context, index) => const SizedBox(height: 10),
-                            itemBuilder: (context, index) {
-                              if (index >= state.notifications.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 16),
-                                  child: Center(
-                                    child: CircularProgressIndicator(color: Color(0xFFB39037)),
-                                  ),
-                                );
-                              }
-                              final notification = state.notifications[index];
-                              return _buildNotificationCard(notification);
-                            },
-                          ),
-                        ),
+              child: Builder(
+                builder: (context) {
+                  final filtered = state.notifications.where((n) {
+                    if (_selectedCategory == 'unread') return !n.isRead;
+                    if (_selectedCategory == 'matches') {
+                      return n.type == NotificationType.newSavedSearchMatch ||
+                          n.type == NotificationType.priceDropMatch ||
+                          n.type == NotificationType.propertyMatch;
+                    }
+                    if (_selectedCategory == 'watch') {
+                      return n.type == NotificationType.propertyWatch ||
+                          n.type == NotificationType.surveyActivity;
+                    }
+                    if (_selectedCategory == 'legal') {
+                      return n.type == NotificationType.legalNoticeAlert ||
+                          n.type == NotificationType.disputeActivity;
+                    }
+                    return true;
+                  }).toList();
+
+                  if (state.isLoading) {
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFFB39037)));
+                  }
+
+                  if (filtered.isEmpty) {
+                    return _buildEmptyState(_selectedCategory == 'unread');
+                  }
+
+                  return RefreshIndicator(
+                    color: const Color(0xFFB39037),
+                    backgroundColor: const Color(0xFF131922),
+                    onRefresh: () async => notifier.loadNotifications(),
+                    child: ListView.separated(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filtered.length + (state.isLoadingMore ? 1 : 0),
+                      separatorBuilder: (context, index) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        if (index >= filtered.length) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: CircularProgressIndicator(color: Color(0xFFB39037)),
+                            ),
+                          );
+                        }
+                        final notification = filtered[index];
+                        return _buildNotificationCard(notification);
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -266,6 +323,11 @@ class _NotificationCenterViewState extends ConsumerState<NotificationCenterView>
       NotificationType.inquiryClosed => Icons.archive_outlined,
       NotificationType.newSavedSearchMatch => Icons.saved_search_rounded,
       NotificationType.priceDropMatch => Icons.trending_down_rounded,
+      NotificationType.propertyMatch => Icons.auto_awesome_rounded,
+      NotificationType.propertyWatch => Icons.visibility_rounded,
+      NotificationType.surveyActivity => Icons.map_rounded,
+      NotificationType.legalNoticeAlert => Icons.gavel_rounded,
+      NotificationType.disputeActivity => Icons.shield_outlined,
       NotificationType.newChatMessage => Icons.chat_bubble_outline_rounded,
       NotificationType.system => Icons.info_outline_rounded,
     };
@@ -279,6 +341,11 @@ class _NotificationCenterViewState extends ConsumerState<NotificationCenterView>
       NotificationType.inquiryClosed => const Color(0xFF94A3B8),
       NotificationType.newSavedSearchMatch => const Color(0xFF38BDF8),
       NotificationType.priceDropMatch => const Color(0xFF10B981),
+      NotificationType.propertyMatch => const Color(0xFFEAB308),
+      NotificationType.propertyWatch => const Color(0xFF38BDF8),
+      NotificationType.surveyActivity => const Color(0xFF10B981),
+      NotificationType.legalNoticeAlert => const Color(0xFFF97316),
+      NotificationType.disputeActivity => const Color(0xFFEF4444),
       NotificationType.newChatMessage => const Color(0xFF38BDF8),
       NotificationType.system => const Color(0xFF6366F1),
     };

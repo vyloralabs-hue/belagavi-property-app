@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../property/domain/entities/property_entities.dart';
+import '../../../../core/geo/geo_math.dart';
 import 'search_entities.dart';
 
 enum LocationCandidateType {
@@ -9,6 +10,14 @@ enum LocationCandidateType {
   landmark,
   pincode,
   state,
+  taluk,
+}
+
+enum DiscoveryLocationMode {
+  nearMe,
+  chooseLocation,
+  exploreMap,
+  allIndia,
 }
 
 class LocationCandidate extends Equatable {
@@ -21,6 +30,7 @@ class LocationCandidate extends Equatable {
   final String? stateCode;
   final String countryCode;
   final String countryName;
+  final String? talukName;
   final String? localityName;
   final String? areaName;
   final String? pincode;
@@ -37,6 +47,7 @@ class LocationCandidate extends Equatable {
     this.stateCode,
     this.countryCode = 'IN',
     this.countryName = 'India',
+    this.talukName,
     this.localityName,
     this.areaName,
     this.pincode,
@@ -58,6 +69,8 @@ class LocationCandidate extends Equatable {
         return 'PINCODE';
       case LocationCandidateType.state:
         return 'STATE';
+      case LocationCandidateType.taluk:
+        return 'TALUK';
     }
   }
 
@@ -68,6 +81,7 @@ class LocationCandidate extends Equatable {
       stateCode: stateCode,
       stateName: stateName,
       cityName: cityName,
+      talukName: talukName ?? (type == LocationCandidateType.taluk ? name : null),
       localityName: localityName ?? (type == LocationCandidateType.locality ? name : null),
       areaName: areaName ?? (type == LocationCandidateType.area ? name : null),
       pincode: pincode ?? (type == LocationCandidateType.pincode ? name : null),
@@ -75,9 +89,9 @@ class LocationCandidate extends Equatable {
       longitude: longitude,
       hasExplicitSelection: true,
       isAllIndia: false,
+      mode: DiscoveryLocationMode.chooseLocation,
     );
   }
-
 
   @override
   List<Object?> get props => [
@@ -88,6 +102,7 @@ class LocationCandidate extends Equatable {
         cityName,
         stateName,
         stateCode,
+        talukName,
         localityName,
         areaName,
         pincode,
@@ -102,6 +117,7 @@ class UserLocationContext extends Equatable {
   final String? stateCode;
   final String? stateName;
   final String? districtName;
+  final String? talukName;
   final String? cityName;
   final String? localityName;
   final String? areaName;
@@ -112,6 +128,7 @@ class UserLocationContext extends Equatable {
   final List<String> selectedLocalities;
   final bool hasExplicitSelection;
   final bool isAllIndia;
+  final DiscoveryLocationMode mode;
 
   const UserLocationContext({
     this.countryCode = 'IN',
@@ -119,6 +136,7 @@ class UserLocationContext extends Equatable {
     this.stateCode,
     this.stateName,
     this.districtName,
+    this.talukName,
     this.cityName,
     this.localityName,
     this.areaName,
@@ -129,6 +147,7 @@ class UserLocationContext extends Equatable {
     this.selectedLocalities = const [],
     this.hasExplicitSelection = false,
     this.isAllIndia = false,
+    this.mode = DiscoveryLocationMode.chooseLocation,
   });
 
   static const UserLocationContext unselected = UserLocationContext(
@@ -136,6 +155,7 @@ class UserLocationContext extends Equatable {
     countryName: 'India',
     hasExplicitSelection: false,
     isAllIndia: false,
+    mode: DiscoveryLocationMode.chooseLocation,
   );
 
   static const UserLocationContext allIndia = UserLocationContext(
@@ -143,10 +163,23 @@ class UserLocationContext extends Equatable {
     countryName: 'India',
     hasExplicitSelection: true,
     isAllIndia: true,
+    mode: DiscoveryLocationMode.allIndia,
   );
 
   String get displayName {
-    if (isAllIndia) return 'All India';
+    if (isAllIndia || mode == DiscoveryLocationMode.allIndia) return 'All India';
+    if (mode == DiscoveryLocationMode.nearMe) {
+      final rad = radiusKm != null ? ' (${radiusKm!.round()} km)' : '';
+      if (localityName != null && localityName!.isNotEmpty) return 'Near $localityName$rad';
+      if (cityName != null && cityName!.isNotEmpty) return 'Near $cityName$rad';
+      return 'Near Me$rad';
+    }
+    if (mode == DiscoveryLocationMode.exploreMap) {
+      final rad = radiusKm != null ? ' (${radiusKm!.round()} km)' : '';
+      if (localityName != null && localityName!.isNotEmpty) return '$localityName Map Area$rad';
+      if (cityName != null && cityName!.isNotEmpty) return '$cityName Map Area$rad';
+      return 'Map Area$rad';
+    }
     if (localityName != null && localityName!.isNotEmpty && cityName != null && cityName!.isNotEmpty) {
       return '$localityName, $cityName';
     }
@@ -156,6 +189,12 @@ class UserLocationContext extends Equatable {
     if (cityName != null && cityName!.isNotEmpty) {
       return cityName!;
     }
+    if (talukName != null && talukName!.isNotEmpty) {
+      return '$talukName Taluk';
+    }
+    if (districtName != null && districtName!.isNotEmpty) {
+      return '$districtName District';
+    }
     if (stateName != null && stateName!.isNotEmpty) {
       return stateName!;
     }
@@ -163,12 +202,20 @@ class UserLocationContext extends Equatable {
   }
 
   String get shortDisplayName {
-    if (isAllIndia) return 'All India';
+    if (isAllIndia || mode == DiscoveryLocationMode.allIndia) return 'All India';
+    if (mode == DiscoveryLocationMode.nearMe) return 'Near Me';
+    if (mode == DiscoveryLocationMode.exploreMap) return 'Explore Map';
     if (localityName != null && localityName!.isNotEmpty) {
       return localityName!;
     }
     if (cityName != null && cityName!.isNotEmpty) {
       return cityName!;
+    }
+    if (talukName != null && talukName!.isNotEmpty) {
+      return talukName!;
+    }
+    if (districtName != null && districtName!.isNotEmpty) {
+      return districtName!;
     }
     if (stateName != null && stateName!.isNotEmpty) {
       return stateName!;
@@ -207,7 +254,7 @@ class UserLocationContext extends Equatable {
     int offset = 0,
     String? rawQuery,
   }) {
-    if (isAllIndia) {
+    if (isAllIndia || mode == DiscoveryLocationMode.allIndia) {
       return SearchQueryEntity(
         country: countryName,
         category: category,
@@ -220,6 +267,38 @@ class UserLocationContext extends Equatable {
       );
     }
 
+    // Radius / Bounding-box search for Near Me or Explore Map
+    if ((mode == DiscoveryLocationMode.nearMe || mode == DiscoveryLocationMode.exploreMap) &&
+        latitude != null &&
+        longitude != null &&
+        radiusKm != null &&
+        radiusKm! > 0) {
+      final bbox = GeoMath.calculateBoundingBox(
+        centerLat: latitude!,
+        centerLng: longitude!,
+        radiusKm: radiusKm!,
+      );
+
+      return SearchQueryEntity(
+        country: countryName.isNotEmpty ? countryName : null,
+        category: category,
+        type: type,
+        purpose: purpose,
+        sortBy: sortBy ?? 'created_at_desc',
+        limit: limit,
+        offset: offset,
+        rawQuery: rawQuery,
+        minLatitude: bbox.south,
+        maxLatitude: bbox.north,
+        minLongitude: bbox.west,
+        maxLongitude: bbox.east,
+        centerLatitude: latitude,
+        centerLongitude: longitude,
+        radiusKm: radiusKm,
+      );
+    }
+
+    // Hierarchy / Cascading search
     return SearchQueryEntity(
       country: countryName.isNotEmpty ? countryName : null,
       state: stateName,
@@ -235,6 +314,8 @@ class UserLocationContext extends Equatable {
       limit: limit,
       offset: offset,
       rawQuery: rawQuery,
+      centerLatitude: latitude,
+      centerLongitude: longitude,
     );
   }
 
@@ -244,6 +325,7 @@ class UserLocationContext extends Equatable {
     String? stateCode,
     String? stateName,
     String? districtName,
+    String? talukName,
     String? cityName,
     String? localityName,
     String? areaName,
@@ -254,6 +336,7 @@ class UserLocationContext extends Equatable {
     List<String>? selectedLocalities,
     bool? hasExplicitSelection,
     bool? isAllIndia,
+    DiscoveryLocationMode? mode,
     bool clearLocality = false,
   }) {
     return UserLocationContext(
@@ -262,6 +345,7 @@ class UserLocationContext extends Equatable {
       stateCode: stateCode ?? this.stateCode,
       stateName: stateName ?? this.stateName,
       districtName: districtName ?? this.districtName,
+      talukName: talukName ?? this.talukName,
       cityName: cityName ?? this.cityName,
       localityName: clearLocality ? null : (localityName ?? this.localityName),
       areaName: clearLocality ? null : (areaName ?? this.areaName),
@@ -272,6 +356,7 @@ class UserLocationContext extends Equatable {
       selectedLocalities: selectedLocalities ?? this.selectedLocalities,
       hasExplicitSelection: hasExplicitSelection ?? this.hasExplicitSelection,
       isAllIndia: isAllIndia ?? this.isAllIndia,
+      mode: mode ?? this.mode,
     );
   }
 
@@ -281,6 +366,7 @@ class UserLocationContext extends Equatable {
         'stateCode': stateCode,
         'stateName': stateName,
         'districtName': districtName,
+        'talukName': talukName,
         'cityName': cityName,
         'localityName': localityName,
         'areaName': areaName,
@@ -291,15 +377,25 @@ class UserLocationContext extends Equatable {
         'selectedLocalities': selectedLocalities,
         'hasExplicitSelection': hasExplicitSelection,
         'isAllIndia': isAllIndia,
+        'mode': mode.name,
       };
 
   factory UserLocationContext.fromJson(Map<String, dynamic> json) {
+    DiscoveryLocationMode parsedMode = DiscoveryLocationMode.chooseLocation;
+    if (json['mode'] != null) {
+      parsedMode = DiscoveryLocationMode.values.firstWhere(
+        (m) => m.name == json['mode'],
+        orElse: () => DiscoveryLocationMode.chooseLocation,
+      );
+    }
+
     return UserLocationContext(
       countryCode: json['countryCode'] as String? ?? 'IN',
       countryName: json['countryName'] as String? ?? 'India',
       stateCode: json['stateCode'] as String?,
       stateName: json['stateName'] as String?,
       districtName: json['districtName'] as String?,
+      talukName: json['talukName'] as String?,
       cityName: json['cityName'] as String?,
       localityName: json['localityName'] as String?,
       areaName: json['areaName'] as String?,
@@ -313,6 +409,7 @@ class UserLocationContext extends Equatable {
           const [],
       hasExplicitSelection: json['hasExplicitSelection'] as bool? ?? false,
       isAllIndia: json['isAllIndia'] as bool? ?? false,
+      mode: parsedMode,
     );
   }
 
@@ -323,6 +420,7 @@ class UserLocationContext extends Equatable {
         stateCode,
         stateName,
         districtName,
+        talukName,
         cityName,
         localityName,
         areaName,
@@ -333,5 +431,6 @@ class UserLocationContext extends Equatable {
         selectedLocalities,
         hasExplicitSelection,
         isAllIndia,
+        mode,
       ];
 }

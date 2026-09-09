@@ -18,7 +18,14 @@ import '../providers/dispute_providers.dart';
 /// - Moderation-first publication (submitted -> under_review -> published)
 /// - Creator immediately sees record in My Disputed Properties
 class AddDisputedPropertyView extends ConsumerStatefulWidget {
-  const AddDisputedPropertyView({super.key});
+  final String? editDisputeId;
+  final PropertyDisputeEntity? editDispute;
+
+  const AddDisputedPropertyView({
+    super.key,
+    this.editDisputeId,
+    this.editDispute,
+  });
 
   @override
   ConsumerState<AddDisputedPropertyView> createState() =>
@@ -53,6 +60,54 @@ class _AddDisputedPropertyViewState
   final _courtNameController = TextEditingController();
   final _caseFilingDateController = TextEditingController();
   final _caseOrdersNotesController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.editDispute != null) {
+      Future.microtask(() {
+        if (mounted) _initFromDispute(widget.editDispute!);
+      });
+    } else if (widget.editDisputeId != null && widget.editDisputeId!.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadDisputeForEdit(widget.editDisputeId!));
+    }
+  }
+
+  void _initFromDispute(PropertyDisputeEntity d) {
+    _titleController.text = d.title;
+    _localityController.text = d.locality;
+    _villageController.text = d.village ?? '';
+    _talukController.text = d.taluk ?? 'Belagavi';
+    _districtController.text = d.district ?? 'Belagavi';
+    _stateController.text = d.state;
+    _surveyNumberController.text = d.surveyCtsNumber ?? '';
+    _propertyNumberController.text = d.propertyNumber ?? '';
+    _plotFlatNumberController.text = d.plotFlatShopNumber ?? '';
+    _areaController.text = d.propertyArea != null ? d.propertyArea.toString() : '';
+    _addressController.text = d.fullAddress ?? '';
+    _factualSummaryController.text = d.factualSummary ?? d.description;
+    _claimedNatureController.text = d.claimedDisputeNature ?? '';
+    _caseNumberController.text = d.caseNumber ?? '';
+    _courtNameController.text = d.courtAuthority ?? '';
+    _caseFilingDateController.text = d.caseFilingDate ?? '';
+    _caseOrdersNotesController.text = d.caseOrdersNotes ?? '';
+
+    ref.read(addDisputeWizardNotifierProvider.notifier).populateForEdit(d);
+  }
+
+  Future<void> _loadDisputeForEdit(String id) async {
+    final repo = ref.read(disputeRepositoryProvider);
+    final result = await repo.getDisputeById(id, requestingUserId: '');
+    result.fold(
+      (_) {},
+      (d) {
+        if (d != null && mounted) {
+          _initFromDispute(d);
+          setState(() {});
+        }
+      },
+    );
+  }
 
   static const List<String> _propertyTypes = [
     'House',
@@ -363,8 +418,9 @@ class _AddDisputedPropertyViewState
                       onPressed: state.isSubmitting
                           ? null
                           : () async {
-                              if (!notifier.validateStep(state.currentStep))
+                              if (!notifier.validateStep(state.currentStep)) {
                                 return;
+                              }
 
                               if (state.currentStep < 4) {
                                 notifier.setStep(state.currentStep + 1);
@@ -380,20 +436,34 @@ class _AddDisputedPropertyViewState
                                   return;
                                 }
 
-                                final created = await notifier.submitDispute(
-                                  currentUserId,
-                                );
-                                if (created != null && mounted) {
+                                final isEditing = widget.editDispute != null || (widget.editDisputeId != null && widget.editDisputeId!.isNotEmpty);
+                                PropertyDisputeEntity? resultEntity;
+
+                                if (isEditing && widget.editDispute != null) {
+                                  resultEntity = await notifier.updateDispute(
+                                    widget.editDispute!,
+                                    currentUserId,
+                                  );
+                                } else {
+                                  resultEntity = await notifier.submitDispute(
+                                    currentUserId,
+                                  );
+                                }
+
+                                if (resultEntity != null && mounted) {
                                   ref
                                       .read(
                                         myDisputedPropertiesNotifierProvider
                                             .notifier,
                                       )
-                                      .prependDispute(created);
+                                      .prependDispute(resultEntity);
+                                  if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
+                                    SnackBar(
                                       content: Text(
-                                        'Disputed property submitted for platform review successfully!',
+                                        isEditing
+                                            ? 'Dispute record updated successfully!'
+                                            : 'Disputed property submitted for platform review successfully!',
                                       ),
                                     ),
                                   );
@@ -503,8 +573,9 @@ class _AddDisputedPropertyViewState
                   .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                   .toList(),
               onChanged: (val) {
-                if (val != null)
+                if (val != null) {
                   notifier.updatePropertyDetails(propertyType: val);
+                }
               },
             ),
           ),
@@ -762,8 +833,9 @@ class _AddDisputedPropertyViewState
                           ),
                         ],
                         onChanged: (val) {
-                          if (val != null)
+                          if (val != null) {
                             notifier.updatePropertyDetails(areaUnit: val);
+                          }
                         },
                       ),
                     ),
@@ -827,8 +899,9 @@ class _AddDisputedPropertyViewState
                   .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                   .toList(),
               onChanged: (val) {
-                if (val != null)
+                if (val != null) {
                   notifier.updateDisputeDetails(disputeCategory: val);
+                }
               },
             ),
           ),
@@ -868,8 +941,9 @@ class _AddDisputedPropertyViewState
                   .map((r) => DropdownMenuItem(value: r, child: Text(r)))
                   .toList(),
               onChanged: (val) {
-                if (val != null)
+                if (val != null) {
                   notifier.updateDisputeDetails(claimingPartyRole: val);
+                }
               },
             ),
           ),
@@ -899,8 +973,9 @@ class _AddDisputedPropertyViewState
                   .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                   .toList(),
               onChanged: (val) {
-                if (val != null)
+                if (val != null) {
                   notifier.updateDisputeDetails(currentStage: val);
+                }
               },
             ),
           ),

@@ -4,6 +4,7 @@ import '../../../../bootstrap/bootstrap.dart';
 import '../../domain/repositories/property_repository.dart';
 import 'my_properties_notifier.dart';
 import 'property_form_notifier.dart';
+import 'vault_notifier.dart';
 
 final propertyRepositoryProvider = Provider<PropertyRepository>((ref) {
   return getIt<PropertyRepository>();
@@ -22,3 +23,9 @@ final myPropertiesNotifierProvider =
 });
 
 final propertiesListProvider = myPropertiesNotifierProvider;
+
+final vaultNotifierProvider =
+    StateNotifierProvider<VaultNotifier, VaultState>((ref) {
+  final repo = ref.watch(propertyRepositoryProvider);
+  return VaultNotifier(repo);
+});

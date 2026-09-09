@@ -154,6 +154,8 @@ class _DisputedPropertyDetailViewState
                           }
                         } catch (_) {}
                         final repo = ref.read(disputeRepositoryProvider);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final navigator = Navigator.of(ctx);
                         await repo.submitDisputeResponse(
                           disputeId: widget.disputeId,
                           respondentId: currentUserId,
@@ -165,8 +167,8 @@ class _DisputedPropertyDetailViewState
                           statement: statementController.text.trim(),
                         );
                         if (mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          navigator.pop();
+                          messenger.showSnackBar(
                             const SnackBar(
                               content: Text(
                                 'Response submitted for platform review successfully!',

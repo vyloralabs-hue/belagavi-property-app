@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../../../../core/security/user_role.dart';
 import '../../../../core/utils/typedefs.dart';
 import '../entities/legal_notice_entities.dart';
@@ -47,6 +48,13 @@ abstract class LegalNoticeRepository {
     String noticeId, {
     required String authenticatedUserId,
     UserRole? userRole,
+  });
+
+  FutureEither<String> uploadLegalNoticeDocumentFile({
+    required String noticeId,
+    required String fileName,
+    required Uint8List fileBytes,
+    String? authenticatedUserId,
   });
 
   // End-to-End Legal Notice & Dispute Assistance Module Methods

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:belagavi_property/core/config/app_brand_config.dart';
 import '../../../theme/app_design_system.dart';
+import '../../../../property_search/presentation/providers/user_location_notifier.dart';
+import '../../search/widgets/universal_location_search_modal.dart';
 
 /// Top Bar for Home Screen — Production Dual-Theme Architecture
 /// Reference: Image 1 (Light Mode) & Image 2 (Dark Mode)
@@ -15,83 +17,7 @@ class HomeHeaderBar extends ConsumerStatefulWidget {
 }
 
 class _HomeHeaderBarState extends ConsumerState<HomeHeaderBar> {
-  String _selectedLocation = AppBrandConfig.defaultCity;
   String _selectedLanguage = 'EN';
-
-  void _showLocationPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppDesignSystem.surfaceElevated(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Select Location',
-                    style: TextStyle(
-                      fontFamily: AppDesignSystem.fontFamily,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: AppDesignSystem.textP(ctx),
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close_rounded, color: AppDesignSystem.textS(ctx), size: 20),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Browse real estate listings by city or region.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppDesignSystem.textS(ctx),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ...AppBrandConfig.availableLocations.map((loc) {
-                final isSelected = loc == _selectedLocation;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    Icons.location_on_rounded,
-                    color: isSelected ? AppDesignSystem.brandGold : AppDesignSystem.textS(ctx),
-                    size: 20,
-                  ),
-                  title: Text(
-                    loc,
-                    style: TextStyle(
-                      fontFamily: AppDesignSystem.fontFamily,
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                      color: isSelected ? AppDesignSystem.brandGold : AppDesignSystem.textP(ctx),
-                    ),
-                  ),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle_rounded, color: AppDesignSystem.brandGold, size: 20)
-                      : null,
-                  onTap: () {
-                    setState(() => _selectedLocation = loc);
-                    Navigator.pop(ctx);
-                  },
-                );
-              }),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showLanguagePicker(BuildContext context) {
     showModalBottomSheet(
@@ -203,43 +129,55 @@ class _HomeHeaderBarState extends ConsumerState<HomeHeaderBar> {
           ),
 
           // Location Selector Pill
-          GestureDetector(
-            onTap: () => _showLocationPicker(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: pillBg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: borderCol, width: 1),
-                boxShadow: isDark ? null : AppDesignSystem.softShadow,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.location_on_rounded,
-                    size: 13,
-                    color: AppDesignSystem.brandGold,
+          Builder(
+            builder: (ctx) {
+              final userLoc = ref.watch(userLocationNotifierProvider).current;
+              final locLabel = userLoc.displayName == 'Select Location' ? AppBrandConfig.defaultCity : userLoc.displayName;
+
+              return GestureDetector(
+                onTap: () => UniversalLocationSearchModal.show(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: pillBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: borderCol, width: 1),
+                    boxShadow: isDark ? null : AppDesignSystem.softShadow,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _selectedLocation,
-                    style: TextStyle(
-                      fontFamily: AppDesignSystem.fontFamily,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: textP,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_on_rounded,
+                        size: 13,
+                        color: AppDesignSystem.brandGold,
+                      ),
+                      const SizedBox(width: 4),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 120),
+                        child: Text(
+                          locLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: AppDesignSystem.fontFamily,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: textP,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 14,
+                        color: AppDesignSystem.textS(context),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 2),
-                  Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 14,
-                    color: AppDesignSystem.textS(context),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
           const SizedBox(width: 6),
 

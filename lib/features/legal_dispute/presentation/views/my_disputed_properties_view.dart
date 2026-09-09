@@ -308,14 +308,206 @@ class _MyDisputedPropertiesViewState extends ConsumerState<MyDisputedPropertiesV
                     '${dispute.documents.length + dispute.documentUrls.length} attached docs',
                     style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textP),
                   ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppDesignSystem.brandGold),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: borderCol.withValues(alpha: 0.5)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // View Details Button
+                  TextButton.icon(
+                    onPressed: () => context.push('/disputed-properties/${dispute.id}'),
+                    icon: const Icon(Icons.visibility_outlined, size: 14),
+                    label: const Text('View', style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppDesignSystem.brandGold,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    ),
+                  ),
+                  // Edit Button (Allowed for draft, submitted, under_review)
+                  if (status == DisputeVerificationStatus.draft ||
+                      status == DisputeVerificationStatus.submitted ||
+                      status == DisputeVerificationStatus.underReview)
+                    TextButton.icon(
+                      onPressed: () => _handleEditDispute(dispute),
+                      icon: const Icon(Icons.edit_outlined, size: 14),
+                      label: const Text('Edit', style: TextStyle(fontSize: 11)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF3B82F6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
+                  // Withdraw Button (Allowed for submitted, under_review, publishedListed)
+                  if (status == DisputeVerificationStatus.submitted ||
+                      status == DisputeVerificationStatus.underReview ||
+                      status == DisputeVerificationStatus.publishedListed)
+                    TextButton.icon(
+                      onPressed: () => _handleWithdrawDispute(dispute),
+                      icon: const Icon(Icons.archive_outlined, size: 14),
+                      label: const Text('Withdraw', style: TextStyle(fontSize: 11)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFD97706),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
+                  // Delete Button (Draft, submitted, or under_review)
+                  if (status == DisputeVerificationStatus.draft ||
+                      status == DisputeVerificationStatus.submitted ||
+                      status == DisputeVerificationStatus.underReview)
+                    TextButton.icon(
+                      onPressed: () => _handleDeleteDispute(dispute),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 14),
+                      label: const Text('Delete', style: TextStyle(fontSize: 11)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFEF4444),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                    ),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _handleEditDispute(PropertyDisputeEntity dispute) {
+    context.push(
+      AppRoutes.addDispute,
+      extra: dispute,
+    );
+  }
+
+  Future<void> _handleWithdrawDispute(PropertyDisputeEntity dispute) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Withdraw Dispute Listing?'),
+        content: Text(
+          'Are you sure you want to withdraw "${dispute.title}"? It will no longer be active or visible in public registries.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    String currentUserId = AuthSessionStorageHelper.getUserUid() ?? '';
+    try {
+      final fbUid = FirebaseAuth.instance.currentUser?.uid;
+      if (fbUid != null && fbUid.isNotEmpty) {
+        currentUserId = fbUid;
+      }
+    } catch (_) {}
+
+    final repo = ref.read(disputeRepositoryProvider);
+    final result = await repo.updateDisputeStatus(
+      disputeId: dispute.id,
+      newStatus: DisputeVerificationStatus.withdrawn,
+      authenticatedUserId: currentUserId,
+    );
+
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message), backgroundColor: Colors.red),
+          );
+        }
+      },
+      (updated) {
+        ref.read(myDisputedPropertiesNotifierProvider.notifier).updateDisputeLocally(updated);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dispute listing withdrawn successfully.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Future<void> _handleDeleteDispute(PropertyDisputeEntity dispute) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Dispute Listing?'),
+        content: Text(
+          'Are you sure you want to permanently delete "${dispute.title}"? This will also remove any uploaded documents and cannot be undone.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    String currentUserId = AuthSessionStorageHelper.getUserUid() ?? '';
+    try {
+      final fbUid = FirebaseAuth.instance.currentUser?.uid;
+      if (fbUid != null && fbUid.isNotEmpty) {
+        currentUserId = fbUid;
+      }
+    } catch (_) {}
+
+    final repo = ref.read(disputeRepositoryProvider);
+    final result = await repo.deleteDispute(
+      dispute.id,
+      authenticatedUserId: currentUserId,
+    );
+
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message), backgroundColor: Colors.red),
+          );
+        }
+      },
+      (_) {
+        ref.read(myDisputedPropertiesNotifierProvider.notifier).removeDisputeLocally(dispute.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dispute listing deleted permanently.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      },
     );
   }
 }

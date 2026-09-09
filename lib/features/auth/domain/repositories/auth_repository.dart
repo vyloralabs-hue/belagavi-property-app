@@ -38,4 +38,5 @@ abstract class AuthRepository {
   FutureEither<void> sendPasswordResetEmail(String email);
 
   FutureEither<void> signOut();
+  FutureEither<void> deleteAccount();
 }

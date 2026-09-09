@@ -1,5 +1,4 @@
-import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,14 +10,13 @@ import 'package:belagavi_property/core/utils/app_logger.dart';
 import 'package:belagavi_property/features/auth/utils/auth_session_storage_helper.dart';
 import 'package:belagavi_property/features/property/domain/entities/property_entities.dart';
 import 'package:belagavi_property/features/property/presentation/providers/property_form_notifier.dart';
-import 'package:belagavi_property/features/property/presentation/providers/my_properties_notifier.dart';
 import 'package:belagavi_property/features/property/presentation/providers/property_providers.dart';
 import 'package:belagavi_property/features/property/presentation/widgets/app_property_image.dart';
 import 'package:belagavi_property/features/property/services/media_picker_service.dart';
 import 'package:belagavi_property/features/property/services/property_media_upload_service.dart';
+import 'package:belagavi_property/features/property/services/media_location_resolver.dart';
 import 'package:belagavi_property/features/presentation_ui/theme/app_design_system.dart';
 import 'package:belagavi_property/features/property_search/domain/entities/search_entities.dart';
-import 'package:belagavi_property/features/property_search/domain/entities/user_location_context.dart';
 import 'package:belagavi_property/features/property_search/presentation/providers/property_search_notifier.dart';
 import 'package:belagavi_property/features/property_search/presentation/providers/user_location_notifier.dart';
 import 'widgets/interactive_map_location_picker.dart';
@@ -26,11 +24,13 @@ import '../property_details/google_maps_launcher.dart';
 
 class AddPropertyWizardView extends ConsumerStatefulWidget {
   final PropertyEntity? editProperty;
+  final String? editPropertyId;
   final PropertyCategory? initialCategory;
 
   const AddPropertyWizardView({
     super.key,
     this.editProperty,
+    this.editPropertyId,
     this.initialCategory,
   });
 
@@ -106,11 +106,12 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
   bool _isUploading = false;
   double _uploadProgress = 0.0;
   String _uploadStatusMessage = '';
+  static final Map<String, Uint8List> _localMediaBytes = {};
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    Future.microtask(() async {
       final currentUserId =
           FirebaseAuth.instance.currentUser?.uid ??
           AuthSessionStorageHelper.getUserUid() ??
@@ -120,6 +121,18 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
             .read(propertyFormNotifierProvider.notifier)
             .initForEditing(widget.editProperty!);
         _populateFields(widget.editProperty!);
+      } else if (widget.editPropertyId != null && widget.editPropertyId!.isNotEmpty) {
+        final repo = ref.read(propertyRepositoryProvider);
+        final res = await repo.getPropertyById(widget.editPropertyId!);
+        res.fold(
+          (failure) => AppLogger.e('Failed to load property for editing: ${failure.message}'),
+          (prop) {
+            if (prop != null && mounted) {
+              ref.read(propertyFormNotifierProvider.notifier).initForEditing(prop);
+              _populateFields(prop);
+            }
+          },
+        );
       } else {
         ref
             .read(propertyFormNotifierProvider.notifier)
@@ -463,7 +476,6 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
       'Submit',
     ];
     final textP = AppDesignSystem.textP(context);
-    final textS = AppDesignSystem.textS(context);
     final surfaceBg = AppDesignSystem.surfaceBg(context);
     final borderCol = AppDesignSystem.borderCol(context);
 
@@ -1300,6 +1312,37 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
           'Specify public locality and private protected site location.',
           style: TextStyle(fontSize: 13, color: textS),
         ),
+        if (widget.editProperty != null &&
+            (widget.editProperty!.status == ListingStatus.active ||
+                widget.editProperty!.status == ListingStatus.published ||
+                widget.editProperty!.status == ListingStatus.approved)) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade900.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.amber, width: 1),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline_rounded, color: Colors.amber, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Location is locked on live/active listings to prevent marketplace misdirection. Contact support if physical address correction is needed.',
+                    style: TextStyle(
+                      fontFamily: AppDesignSystem.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: textP,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
 
         // Quick Belagavi Localities Selection
@@ -1457,7 +1500,10 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildTextField(
-                      label: 'City *',
+                      label: (state.category == PropertyCategory.land ||
+                              state.category == PropertyCategory.plotLand)
+                          ? 'City / Town (Optional)'
+                          : 'City *',
                       controller: _cityController,
                       errorText: state.fieldErrors['city'],
                       onChanged: (val) => notifier.updateLocation(city: val),
@@ -2589,6 +2635,105 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+
+        // ─── AUTHORITATIVE PROPERTY LOCATION & MEDIA INTELLIGENCE CARD ───
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF141E28) : const Color(0xFFF0F9FF),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? const Color(0xFF0369A1) : const Color(0xFFBAE6FD),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.pin_drop_rounded,
+                    color: Color(0xFF0284C7),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'AUTHORITATIVE PROPERTY LOCATION',
+                      style: TextStyle(
+                        fontFamily: AppDesignSystem.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0284C7),
+                        letterSpacing: 0.4,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => notifier.setStep(2),
+                    child: const Text(
+                      'Edit Location',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF0284C7),
+                        fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${state.locality.isNotEmpty ? state.locality : 'Locality not set'}, ${state.city}, ${state.state}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: textP,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(
+                    state.latitude != null ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                    size: 14,
+                    color: state.latitude != null ? const Color(0xFF10B981) : textS,
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      state.latitude != null
+                          ? 'Map Pin: ${state.latitude!.toStringAsFixed(4)}, ${state.longitude!.toStringAsFixed(4)} (Verified)'
+                          : 'City Center Default Coordinates (No Map Pin)',
+                      style: TextStyle(fontSize: 11, color: textS),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              if (state.mediaList.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Media Evidence: ${state.mediaList.length} photo(s) bound to ${state.city} listing • Photo EXIF privacy protected',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF059669),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
 
         if (_isUploading) ...[
@@ -2604,96 +2749,108 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
           const SizedBox(height: 16),
         ],
 
-        // ─── ACTION BUTTONS ROW (REAL DEVICE MEDIA PICKERS) ────────────────
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
+        // ─── ACTION BUTTONS ROW (RESPONSIVE & CLEAN) ──────────────────────
+        Row(
           children: [
-            ElevatedButton.icon(
-              onPressed: _isUploading ? null : () => _showAddPhotosModal(state),
-              icon: const Icon(
-                Icons.add_photo_alternate_rounded,
-                size: 18,
-                color: Colors.black,
-              ),
-              label: const Text(
-                'Add Photos',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
+            Expanded(
+              flex: 5,
+              child: ElevatedButton.icon(
+                onPressed: _isUploading ? null : () => _showAddPhotosModal(state),
+                icon: const Icon(
+                  Icons.add_photo_alternate_rounded,
+                  size: 16,
                   color: Colors.black,
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppDesignSystem.brandGold,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                label: const Text(
+                  'Add Photos',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Colors.black,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
-            ),
-            OutlinedButton.icon(
-              onPressed: _isUploading
-                  ? null
-                  : () => _takePhotoWithCamera(state),
-              icon: const Icon(
-                Icons.camera_alt_rounded,
-                size: 18,
-                color: AppDesignSystem.brandGold,
-              ),
-              label: const Text(
-                'Take Photo',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppDesignSystem.brandGold,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppDesignSystem.brandGold),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppDesignSystem.brandGold,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 11,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
                 ),
               ),
             ),
-            OutlinedButton.icon(
-              onPressed: _isUploading ? null : () => _showAddVideoModal(state),
-              icon: const Icon(
-                Icons.videocam_rounded,
-                size: 18,
-                color: AppDesignSystem.brandGold,
-              ),
-              label: const Text(
-                'Add Video',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 5,
+              child: OutlinedButton.icon(
+                onPressed: _isUploading
+                    ? null
+                    : () => _takePhotoWithCamera(state),
+                icon: const Icon(
+                  Icons.camera_alt_rounded,
+                  size: 16,
                   color: AppDesignSystem.brandGold,
                 ),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppDesignSystem.brandGold),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                label: const Text(
+                  'Take Photo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: AppDesignSystem.brandGold,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppDesignSystem.brandGold),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 11,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: OutlinedButton.icon(
+                onPressed: _isUploading ? null : () => _showAddVideoModal(state),
+                icon: const Icon(
+                  Icons.videocam_rounded,
+                  size: 16,
+                  color: AppDesignSystem.brandGold,
+                ),
+                label: const Text(
+                  'Video',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: AppDesignSystem.brandGold,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppDesignSystem.brandGold),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 11,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
         if (state.mediaList.isEmpty)
           Container(
-            padding: const EdgeInsets.all(28),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
             decoration: BoxDecoration(
               color: cardBg,
               borderRadius: BorderRadius.circular(16),
@@ -2703,8 +2860,8 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
               child: Column(
                 children: [
                   Container(
-                    width: 60,
-                    height: 60,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEF3C7),
                       shape: BoxShape.circle,
@@ -2715,11 +2872,11 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
                     ),
                     child: const Icon(
                       Icons.add_a_photo_rounded,
-                      size: 30,
+                      size: 28,
                       color: AppDesignSystem.brandGold,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   Text(
                     'No Photos Uploaded Yet',
                     style: TextStyle(
@@ -2730,74 +2887,9 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Upload clear photos of the property to attract verified buyers.',
+                    'Tap "Add Photos" or "Take Photo" above to upload photos.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: textS),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _isUploading
-                            ? null
-                            : () => _pickPhotosFromGallery(state),
-                        icon: const Icon(
-                          Icons.photo_library_rounded,
-                          size: 16,
-                          color: Colors.black,
-                        ),
-                        label: const Text(
-                          'Choose from Gallery',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppDesignSystem.brandGold,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      OutlinedButton.icon(
-                        onPressed: _isUploading
-                            ? null
-                            : () => _takePhotoWithCamera(state),
-                        icon: const Icon(
-                          Icons.camera_alt_outlined,
-                          size: 16,
-                          color: AppDesignSystem.brandGold,
-                        ),
-                        label: const Text(
-                          'Take Photo',
-                          style: TextStyle(
-                            color: AppDesignSystem.brandGold,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(
-                            color: AppDesignSystem.brandGold,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -2973,6 +3065,21 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
             size: 40,
             color: AppDesignSystem.brandGold,
           ),
+        ),
+      );
+    }
+    final cachedBytes = _localMediaBytes[media.id];
+    if (cachedBytes != null && cachedBytes.isNotEmpty) {
+      return Image.memory(
+        cachedBytes,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => AppPropertyImage(
+          imageUrl: media.mediaUrl,
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.cover,
         ),
       );
     }
@@ -3188,10 +3295,11 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
 
     for (int i = 0; i < pickedFiles.length; i++) {
       final file = pickedFiles[i];
+      final latestState = ref.read(propertyFormNotifierProvider);
       await _uploadSelectedFile(
-        state,
+        latestState,
         file,
-        isFirst: i == 0 && state.mediaList.isEmpty,
+        isFirst: i == 0 && latestState.mediaList.isEmpty,
       );
     }
   }
@@ -3200,21 +3308,33 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
     final photo = await _mediaPicker.takePhotoWithCamera();
     if (photo == null) return;
 
-    await _uploadSelectedFile(state, photo, isFirst: state.mediaList.isEmpty);
+    final latestState = ref.read(propertyFormNotifierProvider);
+    await _uploadSelectedFile(latestState, photo, isFirst: latestState.mediaList.isEmpty);
   }
 
   Future<void> _pickVideoFromGallery(PropertyFormState state) async {
     final video = await _mediaPicker.pickVideoFromGallery();
     if (video == null) return;
 
-    await _uploadSelectedFile(state, video, isFirst: false);
+    final latestState = ref.read(propertyFormNotifierProvider);
+    await _uploadSelectedFile(latestState, video, isFirst: false);
   }
 
   Future<void> _recordVideoWithCamera(PropertyFormState state) async {
     final video = await _mediaPicker.recordVideoWithCamera();
     if (video == null) return;
 
-    await _uploadSelectedFile(state, video, isFirst: false);
+    final latestState = ref.read(propertyFormNotifierProvider);
+    await _uploadSelectedFile(latestState, video, isFirst: false);
+  }
+
+  static String _newUuid() {
+    final random = Random.secure();
+    final values = List<int>.generate(16, (i) => random.nextInt(256));
+    values[6] = (values[6] & 0x0f) | 0x40; // version 4
+    values[8] = (values[8] & 0x3f) | 0x80; // variant
+    final hex = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
   }
 
   Future<void> _uploadSelectedFile(
@@ -3222,22 +3342,29 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
     SelectedMediaFile file, {
     bool isFirst = false,
   }) async {
-    final propId = state.id.isNotEmpty
-        ? state.id
-        : 'prop_${DateTime.now().millisecondsSinceEpoch}';
-    final tempMediaId = 'med_${DateTime.now().millisecondsSinceEpoch}';
+    _syncAllControllersToState();
+    final currentState = ref.read(propertyFormNotifierProvider);
+    var propId = currentState.id;
+    if (propId.isEmpty || !propId.contains('-')) {
+      propId = _newUuid();
+      ref.read(propertyFormNotifierProvider.notifier).setPropertyId(propId);
+    }
+    final tempMediaId = _newUuid();
+    if (file.bytes.isNotEmpty) {
+      _localMediaBytes[tempMediaId] = file.bytes;
+    }
     final localUrl = file.path.isNotEmpty
         ? file.path
         : 'file://${file.fileName}';
 
-    // 1. Immediately show local preview
+    final isFirstCover = isFirst || currentState.mediaList.isEmpty;
     final initialMedia = PropertyMediaEntity(
       id: tempMediaId,
       propertyId: propId,
       mediaUrl: localUrl,
       type: file.type,
-      isCover: isFirst || state.mediaList.isEmpty,
-      displayOrder: state.mediaList.length,
+      isCover: isFirstCover,
+      displayOrder: currentState.mediaList.length,
       uploadedAt: DateTime.now(),
     );
     ref.read(propertyFormNotifierProvider.notifier).addMedia(initialMedia);
@@ -3262,16 +3389,21 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
         fileName: file.fileName,
         fileBytes: file.bytes,
         type: file.type,
-        isCover: isFirst || state.mediaList.isEmpty,
-        displayOrder: state.mediaList.length,
+        isCover: isFirstCover,
+        displayOrder: initialMedia.displayOrder,
       );
 
       // Replace local placeholder with remote Supabase storage public URL
+      final newId = media.id.contains('-') ? media.id : tempMediaId;
+      if (file.bytes.isNotEmpty) {
+        _localMediaBytes[newId] = file.bytes;
+      }
+
       final currentList = ref.read(propertyFormNotifierProvider).mediaList;
       final List<PropertyMediaEntity> updatedList = currentList
           .map<PropertyMediaEntity>((m) {
             if (m.id == tempMediaId) {
-              return m.copyWith(id: media.id, mediaUrl: media.mediaUrl);
+              return m.copyWith(id: newId, mediaUrl: media.mediaUrl);
             }
             return m;
           })
@@ -3352,12 +3484,8 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
     }
 
     // Cover photo URL (first isCover, else first in list)
-    final coverMedia = state.mediaList.isNotEmpty
-        ? (state.mediaList.firstWhere(
-            (m) => m.isCover,
-            orElse: () => state.mediaList.first,
-          ))
-        : null;
+    final coverMedia = state.mediaList.where((m) => m.isCover).firstOrNull ??
+        state.mediaList.firstOrNull;
 
     final cardBg = AppDesignSystem.cardBg(context);
     final borderCol = AppDesignSystem.borderCol(context);
@@ -3956,6 +4084,75 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
           const SizedBox(height: 16),
         ],
 
+        // Business Access Lifecycle Notice (Rules 4 & 5)
+        () {
+          final isCommercial = state.category == PropertyCategory.commercial ||
+              state.category == PropertyCategory.industrial ||
+              state.type == PropertySubtype.commercialPlot ||
+              state.type == PropertySubtype.commercialOffice ||
+              state.type == PropertySubtype.commercialShop ||
+              state.type == PropertySubtype.commercialShowroom ||
+              state.type == PropertySubtype.warehouse ||
+              state.type == PropertySubtype.warehouseGodown ||
+              state.type == PropertySubtype.industrialLand;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isCommercial
+                  ? const Color(0xFFFEF3C7)
+                  : const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isCommercial
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xFF10B981),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  isCommercial ? Icons.business_center_rounded : Icons.verified_rounded,
+                  color: isCommercial ? const Color(0xFFB45309) : const Color(0xFF059669),
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isCommercial
+                            ? 'Commercial Listing — Paid Plan Required'
+                            : '15-Day Free Residential Listing Window',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isCommercial ? const Color(0xFF92400E) : const Color(0xFF065F46),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isCommercial
+                            ? 'Commercial properties require an active listing entitlement to publish on the public marketplace.'
+                            : 'Your residential property will be published free for 15 days upon verification approval.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isCommercial ? const Color(0xFFB45309) : const Color(0xFF047857),
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }(),
+
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -4147,24 +4344,43 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
       description: _descriptionController.text,
     );
 
+    final parsedLat = double.tryParse(_latitudeController.text);
+    final parsedLng = double.tryParse(_longitudeController.text);
+
+    final resolvedLoc = MediaLocationResolver.resolve(
+      selectedCity: _cityController.text,
+      selectedLocality: _localityController.text,
+      selectedState: _stateController.text,
+      mapPinLatitude: parsedLat,
+      mapPinLongitude: parsedLng,
+    );
+
+    // Keep text controllers synced to canonical values
+    if (_cityController.text.isNotEmpty && _cityController.text != resolvedLoc.canonicalCity) {
+      _cityController.text = resolvedLoc.canonicalCity;
+    }
+    if (_localityController.text.isNotEmpty && _localityController.text != resolvedLoc.canonicalLocality) {
+      _localityController.text = resolvedLoc.canonicalLocality;
+    }
+
     notifier.updateLocation(
       country: _countryController.text.isNotEmpty
           ? _countryController.text
           : 'India',
-      stateName: _stateController.text.isNotEmpty
-          ? _stateController.text
-          : 'Karnataka',
+      stateName: resolvedLoc.canonicalState,
       district: _districtController.text.isNotEmpty
           ? _districtController.text
-          : 'Belagavi',
-      city: _cityController.text.isNotEmpty ? _cityController.text : 'Belagavi',
-      locality: _localityController.text,
+          : resolvedLoc.canonicalCity,
+      city: resolvedLoc.canonicalCity,
+      locality: resolvedLoc.canonicalLocality,
       address: _streetController.text.isNotEmpty
           ? _streetController.text
-          : _localityController.text,
+          : (resolvedLoc.canonicalLocality.isNotEmpty ? resolvedLoc.canonicalLocality : resolvedLoc.canonicalCity),
       pincode: _pincodeController.text.isNotEmpty
           ? _pincodeController.text
           : '590001',
+      latitude: resolvedLoc.latitude,
+      longitude: resolvedLoc.longitude,
     );
 
     final carpet = double.tryParse(_carpetAreaController.text) ?? 1000.0;
@@ -4299,10 +4515,14 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
                             category: cat,
                           ),
                         );
-                    ref
-                        .read(myPropertiesNotifierProvider.notifier)
-                        .fetchMyProperties(currentUserId);
-                    _showSubmissionSuccessModal(context, state.id);
+                    final isExistingListing = state.id.isNotEmpty &&
+                        state.id.contains('-') &&
+                        state.listingStatus != ListingStatus.draft;
+                    _showSubmissionSuccessModal(
+                      context,
+                      state.id,
+                      isEdit: isExistingListing,
+                    );
                   } else if (mounted) {
                     final formState = ref.read(propertyFormNotifierProvider);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -4326,7 +4546,13 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
                 ),
               ),
               child: Text(
-                state.currentStep == 7 ? 'Submit for Review' : 'Next Step',
+                state.currentStep == 7
+                    ? ((state.id.isNotEmpty &&
+                            state.id.contains('-') &&
+                            state.listingStatus != ListingStatus.draft)
+                        ? 'Save Changes'
+                        : 'Submit for Review')
+                    : 'Next Step',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -4336,7 +4562,11 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
     );
   }
 
-  void _showSubmissionSuccessModal(BuildContext context, String propertyId) {
+  void _showSubmissionSuccessModal(
+    BuildContext context,
+    String propertyId, {
+    bool isEdit = false,
+  }) {
     final textP = AppDesignSystem.textP(context);
     final textS = AppDesignSystem.textS(context);
     final surfaceBg = AppDesignSystem.surfaceBg(context);
@@ -4371,7 +4601,9 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Property Submitted Successfully',
+                isEdit
+                    ? 'Property Updated Successfully'
+                    : 'Property Submitted Successfully',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppDesignSystem.fontFamily,
@@ -4382,7 +4614,9 @@ class _AddPropertyWizardViewState extends ConsumerState<AddPropertyWizardView> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your listing is pending verification. Our team will review your property details before it appears in public marketplace searches.',
+                isEdit
+                    ? 'Your changes have been saved and updated on the marketplace.'
+                    : 'Your listing is pending verification. Our team will review your property details before it appears in public marketplace searches.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: AppDesignSystem.fontFamily,

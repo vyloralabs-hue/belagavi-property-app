@@ -51,12 +51,14 @@ class ErrorHandler {
     }
 
     if (errStr.contains('PostgrestException') ||
-        errStr.contains('StorageException') ||
-        errStr.contains('supabase') ||
-        errStr.contains('postgres') ||
-        errStr.contains('http://') ||
-        errStr.contains('https://')) {
-      return const ServerFailure('Unable to load data right now. Please try again shortly.', 500);
+        errStr.contains('StorageException')) {
+      final cleanMsg = errStr
+          .replaceFirst(RegExp(r'^(PostgrestException|StorageException|Exception):\s*'), '')
+          .trim();
+      return ServerFailure(
+        cleanMsg.isNotEmpty ? cleanMsg : 'Database operation failed. Please try again.',
+        500,
+      );
     }
 
     if (exception is Exception) {

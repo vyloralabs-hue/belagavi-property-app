@@ -36,6 +36,7 @@ abstract class AuthRemoteDataSource {
     required String documentUrl,
   });
   Future<void> signOut();
+  Future<void> deleteAccount();
 }
 
 
@@ -525,6 +526,39 @@ class AuthRemoteDataSourceImpl extends BaseRemoteDataSource implements AuthRemot
       await _firebaseAuth.signOut();
       if (_supabaseService.isInitialized) {
         await _supabaseService.client.auth.signOut();
+      }
+    });
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    return safeQuery(() async {
+      final user = _firebaseAuth.currentUser;
+      final uid = user?.uid;
+
+      // 1. Delete or anonymize profile in Supabase if initialized
+      if (_supabaseService.isInitialized && uid != null) {
+        try {
+          await _supabaseService.from('profiles').delete().eq('firebase_uid', uid);
+        } catch (e) {
+          AppLogger.w('[AuthRemoteDS] Supabase profile deletion error: $e');
+        }
+      }
+
+      // 2. Delete user account from Firebase Auth
+      if (user != null) {
+        await user.delete();
+      }
+
+      // 3. Clear Google Sign-In and Supabase sessions
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
+      if (_supabaseService.isInitialized) {
+        try {
+          await _supabaseService.client.auth.signOut();
+        } catch (_) {}
       }
     });
   }

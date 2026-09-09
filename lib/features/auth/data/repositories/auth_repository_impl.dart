@@ -119,4 +119,9 @@ class AuthRepositoryImpl extends BaseRepository implements AuthRepository {
   FutureEither<void> signOut() async {
     return safeCall(() => _remoteDataSource.signOut());
   }
+
+  @override
+  FutureEither<void> deleteAccount() async {
+    return safeCall(() => _remoteDataSource.deleteAccount());
+  }
 }

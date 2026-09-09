@@ -61,12 +61,8 @@ class SearchIndexDocument extends Equatable {
   factory SearchIndexDocument.fromProperty(PropertyEntity property) {
     final specs = property.specifications;
     final area = specs.superBuiltUpArea ?? specs.carpetArea ?? specs.plotArea;
-    final coverMedia = property.mediaList.isNotEmpty
-        ? property.mediaList.firstWhere(
-            (m) => m.isCover,
-            orElse: () => property.mediaList.first,
-          )
-        : null;
+    final coverMedia = property.mediaList.where((m) => m.isCover).firstOrNull ??
+        property.mediaList.firstOrNull;
 
     return SearchIndexDocument(
       propertyId: property.id,

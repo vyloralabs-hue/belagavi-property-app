@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide LocalStorage;
 
 import '../core/constants/app_constants.dart';
@@ -92,7 +92,53 @@ class AppBootstrap {
         );
       }
 
-      // 3. Supabase Initialization with Production Configuration Guard & 5s timeout safety
+      // 3. Firebase Initialization with 5s timeout safety (Must precede Supabase for accessToken bridge)
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        ).timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            AppLogger.w('Firebase initialization timed out after 5s; continuing bootstrap.');
+            return Firebase.app();
+          },
+        );
+        if (!kIsWeb) {
+          FlutterError.onError = (FlutterErrorDetails details) {
+            FlutterError.presentError(details);
+            AppLogger.e('FLUTTER_ERROR: ${details.exceptionAsString()}', details.exception, details.stack);
+            try {
+              FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+            } catch (_) {}
+          };
+          PlatformDispatcher.instance.onError = (error, stack) {
+            AppLogger.e('PLATFORM_ERROR: $error', error, stack);
+            try {
+              FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+            } catch (_) {}
+            return false;
+          };
+          ErrorWidget.builder = (FlutterErrorDetails details) {
+            return Material(
+              color: const Color(0xFF7F1D1D),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SingleChildScrollView(
+                  child: Text(
+                    'CRITICAL UI BUILD ERROR:\n${details.exceptionAsString()}\n\n${details.stack}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ),
+            );
+          };
+        }
+        AppLogger.i('Firebase initialized successfully.');
+      } catch (e) {
+        AppLogger.w('Firebase initialization deferred: $e');
+      }
+
+      // 4. Supabase Initialization with Production Configuration Guard & 5s timeout safety
       final isPlaceholderSupabase = supabaseUrl.contains('prod.supabase.co') ||
           supabaseUrl.contains('example') ||
           supabaseAnonKey.contains('prod_anon_key') ||
@@ -110,8 +156,11 @@ class AppBootstrap {
             anonKey: supabaseAnonKey,
             accessToken: () async {
               try {
-                return await FirebaseAuth.instance.currentUser?.getIdToken();
-              } catch (_) {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) return null;
+                return await user.getIdToken();
+              } catch (e) {
+                AppLogger.w('Supabase accessToken callback error: $e');
                 return null;
               }
             },
@@ -126,29 +175,6 @@ class AppBootstrap {
         } catch (e) {
           AppLogger.w('Supabase initialization deferred: $e');
         }
-      }
-
-      // 4. Firebase Initialization with 5s timeout safety
-      try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        ).timeout(
-          const Duration(seconds: 5),
-          onTimeout: () {
-            AppLogger.w('Firebase initialization timed out after 5s; continuing bootstrap.');
-            return Firebase.app();
-          },
-        );
-        if (!kIsWeb) {
-          FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-          PlatformDispatcher.instance.onError = (error, stack) {
-            FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-            return true;
-          };
-        }
-        AppLogger.i('Firebase initialized successfully.');
-      } catch (e) {
-        AppLogger.w('Firebase initialization deferred: $e');
       }
 
       // 5. Dependency Injection setup

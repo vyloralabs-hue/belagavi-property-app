@@ -10,8 +10,13 @@ import '../providers/legal_notice_providers.dart';
 /// Rich Public Legal Notice Detail View
 class LegalNoticeDetailView extends ConsumerStatefulWidget {
   final String noticeId;
+  final TransactionLegalNoticeEntity? initialNotice;
 
-  const LegalNoticeDetailView({super.key, required this.noticeId});
+  const LegalNoticeDetailView({
+    super.key,
+    required this.noticeId,
+    this.initialNotice,
+  });
 
   @override
   ConsumerState<LegalNoticeDetailView> createState() => _LegalNoticeDetailViewState();
@@ -59,6 +64,126 @@ class _LegalNoticeDetailViewState extends ConsumerState<LegalNoticeDetailView> {
     }
   }
 
+  Future<void> _handleWithdrawNotice(TransactionLegalNoticeEntity notice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Withdraw Legal Notice?'),
+        content: Text(
+          'Are you sure you want to withdraw "${notice.title}"? It will be marked as withdrawn and archived.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final currentUserId = AuthSessionStorageHelper.getUserUid() ?? 'usr_current';
+    final repo = ref.read(legalNoticeRepositoryProvider);
+    final result = await repo.updateStatus(
+      noticeId: notice.id,
+      newStatus: LegalNoticeStatus.withdrawn,
+      authenticatedUserId: currentUserId,
+    );
+
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message), backgroundColor: Colors.red),
+          );
+        }
+      },
+      (updated) {
+        ref.read(legalNoticesNotifierProvider.notifier).loadLegalNotices();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Notice marked as withdrawn successfully.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Future<void> _handleDeleteNotice(TransactionLegalNoticeEntity notice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Legal Notice?'),
+        content: Text(
+          'Are you sure you want to delete "${notice.title}"? This will also remove any attached document scans.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final currentUserId = AuthSessionStorageHelper.getUserUid() ?? 'usr_current';
+    final repo = ref.read(legalNoticeRepositoryProvider);
+    final result = await repo.deleteLegalNotice(
+      notice.id,
+      authenticatedUserId: currentUserId,
+    );
+
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(failure.message), backgroundColor: Colors.red),
+          );
+        }
+      },
+      (_) {
+        ref.read(legalNoticesNotifierProvider.notifier).loadLegalNotices();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Notice deleted successfully.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/legal-notices');
+          }
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(legalNoticesNotifierProvider);
@@ -67,8 +192,8 @@ class _LegalNoticeDetailViewState extends ConsumerState<LegalNoticeDetailView> {
     final cardBg = AppDesignSystem.cardBg(context);
     final borderCol = AppDesignSystem.borderCol(context);
 
-    // Find notice from list or show placeholder
-    final notice = state.notices.firstWhere(
+    // Find notice from list or initialNotice or show placeholder
+    final notice = widget.initialNotice ?? state.notices.firstWhere(
       (n) => n.id == widget.noticeId,
       orElse: () => TransactionLegalNoticeEntity(
         id: widget.noticeId,
@@ -105,6 +230,50 @@ class _LegalNoticeDetailViewState extends ConsumerState<LegalNoticeDetailView> {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notice link copied to clipboard')));
             },
           ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert_rounded, color: textP),
+            onSelected: (action) {
+              if (action == 'edit') {
+                context.push('/legal-notice/edit/${notice.id}', extra: notice);
+              } else if (action == 'withdraw') {
+                _handleWithdrawNotice(notice);
+              } else if (action == 'delete') {
+                _handleDeleteNotice(notice);
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18, color: Color(0xFF0284C7)),
+                    SizedBox(width: 8),
+                    Text('Edit Notice'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'withdraw',
+                child: Row(
+                  children: [
+                    Icon(Icons.archive_outlined, size: 18, color: Color(0xFFD97706)),
+                    SizedBox(width: 8),
+                    Text('Withdraw / Archive'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
+                    SizedBox(width: 8),
+                    Text('Delete'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -112,31 +281,61 @@ class _LegalNoticeDetailViewState extends ConsumerState<LegalNoticeDetailView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Warning / Public notice banner
+            // Warning / Public notice banner (Dynamic based on 10-day lifecycle)
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
+                color: notice.isExpiredFromPublicView
+                    ? const Color(0xFFF1F5F9)
+                    : const Color(0xFFEFF6FF),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
+                border: Border.all(
+                  color: notice.isExpiredFromPublicView
+                      ? const Color(0xFFCBD5E1)
+                      : const Color(0xFFBFDBFE),
+                ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.verified_user_rounded, color: Color(0xFF0284C7), size: 22),
+                  Icon(
+                    notice.isExpiredFromPublicView
+                        ? Icons.history_rounded
+                        : Icons.verified_user_rounded,
+                    color: notice.isExpiredFromPublicView
+                        ? const Color(0xFF64748B)
+                        : const Color(0xFF0284C7),
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'OFFICIAL PUBLIC LEGAL NOTICE',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue.shade900),
+                          notice.isExpiredFromPublicView
+                              ? 'PRIVATE RECORD • EXPIRED FROM PUBLIC VIEW'
+                              : 'OFFICIAL PUBLIC LEGAL NOTICE • 10-DAY WINDOW',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: notice.isExpiredFromPublicView
+                                ? const Color(0xFF334155)
+                                : Colors.blue.shade900,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Published for statutory title verification, public objection window, and buyer/seller transparency.',
-                          style: TextStyle(fontSize: 11.5, color: Colors.blue.shade800, height: 1.4),
+                          notice.isExpiredFromPublicView
+                              ? 'This notice has completed its 10-day public visibility window. It is hidden from public feeds and search, but permanently preserved in your account history.'
+                              : 'Published for statutory title verification, public objection window, and buyer/seller transparency. Visible publicly for 10 days.',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: notice.isExpiredFromPublicView
+                                ? const Color(0xFF475569)
+                                : Colors.blue.shade800,
+                            height: 1.4,
+                          ),
                         ),
                       ],
                     ),
@@ -172,6 +371,32 @@ class _LegalNoticeDetailViewState extends ConsumerState<LegalNoticeDetailView> {
                         ),
                       ),
                       const Spacer(),
+                      if (notice.isPubliclyActive)
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Public • ${notice.remainingPublicDays}d remaining',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF16A34A)),
+                          ),
+                        )
+                      else if (notice.isExpiredFromPublicView)
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF64748B).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Expired from Public',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF64748B)),
+                          ),
+                        ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
@@ -299,10 +524,90 @@ class _LegalNoticeDetailViewState extends ConsumerState<LegalNoticeDetailView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Supporting legal documents are encrypted and protected. Verified reviewers examine filings during moderation.',
+                    'Supporting legal documents are encrypted and stored in canonical cloud storage without duplication. Documents are lazy-loaded only when requested.',
                     style: TextStyle(fontSize: 12, color: textS, height: 1.4),
                   ),
-                  const SizedBox(height: 14),
+                  if (notice.documentUrls.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    ...notice.documentUrls.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final docUrl = entry.value;
+                      final docLabel = idx < notice.documentLabels.length
+                          ? notice.documentLabels[idx]
+                          : 'Legal Document Scan #${idx + 1}';
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppDesignSystem.inputBg(context),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderCol),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.picture_as_pdf_rounded, size: 22, color: Color(0xFFDC2626)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    docLabel,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                      color: textP,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Canonical Storage • Lazy load on tap',
+                                    style: TextStyle(fontSize: 10.5, color: textS),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (dCtx) => AlertDialog(
+                                    title: Text(docLabel, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                    content: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.description_outlined, size: 48, color: Color(0xFF0284C7)),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'Canonical Document Path:\n$docUrl',
+                                          style: const TextStyle(fontSize: 11),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dCtx),
+                                        child: const Text('Close'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.visibility_outlined, size: 14),
+                              label: const Text('View', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                foregroundColor: const Color(0xFF0284C7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  const SizedBox(height: 12),
                   ElevatedButton.icon(
                     onPressed: _isAttaching ? null : () => _handleAttachDocument(notice),
                     icon: const Icon(Icons.attach_file, size: 16),

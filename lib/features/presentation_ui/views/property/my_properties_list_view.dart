@@ -6,8 +6,8 @@ import 'package:belagavi_property/features/property/domain/entities/property_ent
 import 'package:belagavi_property/features/property/presentation/providers/my_properties_notifier.dart';
 import 'package:belagavi_property/features/property/presentation/providers/property_providers.dart';
 import 'package:belagavi_property/features/property/presentation/widgets/app_property_image.dart';
+import 'package:belagavi_property/features/property/services/property_media_resolver.dart';
 import '../../theme/app_design_system.dart';
-import 'add_property_wizard_view.dart';
 import 'widgets/category_selection_modal.dart';
 import 'package:belagavi_property/features/monetization/presentation/widgets/promote_property_modal.dart';
 
@@ -52,6 +52,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
     final tabs = [
       'All',
       'Published',
+      'Expired',
       'Paused',
       'Submitted',
       'Drafts',
@@ -105,100 +106,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
       body: SafeArea(
         child: Column(
           children: [
-            // Minimal Temporary E2E Diagnostic Panel with Per-Property Provenance
-            Builder(
-              builder: (context) {
-                final remoteRowsCount = state.allProperties.where((p) => state.remotePropertyIds.contains(p.id)).length;
-                final localOnlyCount = state.allProperties.length - remoteRowsCount;
-                final totalCount = state.allProperties.length;
 
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade900.withValues(alpha: 0.25),
-                    border: Border.all(color: Colors.amber, width: 1.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'E2E DIAGNOSTIC',
-                        style: TextStyle(
-                          fontFamily: AppDesignSystem.fontFamily,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: Colors.amber,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Authenticated: ${state.isAuthenticated ? 'YES' : 'NO'}',
-                        style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Profile resolved: ${state.profileResolved ? 'YES' : 'NO'}',
-                        style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Remote fetch succeeded: ${state.remoteFetchSucceeded ? 'YES' : 'NO'}',
-                        style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Remote rows: $remoteRowsCount',
-                        style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Local-only rows: $localOnlyCount',
-                        style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Total displayed: $totalCount',
-                        style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      if (state.allProperties.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        const Divider(color: Colors.amber, height: 1),
-                        const SizedBox(height: 6),
-                        ...state.allProperties.map((p) {
-                          final isRemote = state.remotePropertyIds.contains(p.id);
-                          final sourceStr = isRemote ? 'REMOTE' : (state.status == MyPropertiesStateStatus.loaded ? 'LOCAL' : 'UNKNOWN');
-                          final sourceColor = isRemote ? Colors.greenAccent : Colors.orangeAccent;
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Title: ${p.title}',
-                                  style: TextStyle(color: textP, fontSize: 13, fontWeight: FontWeight.bold),
-                                ),
-                                SelectableText(
-                                  'UUID: ${p.id}',
-                                  style: const TextStyle(color: Colors.cyan, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  'Status: ${p.status.dbValue}',
-                                  style: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  'Source: $sourceStr',
-                                  style: TextStyle(color: sourceColor, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
 
             // Filter Tabs
             Container(
@@ -400,19 +308,17 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
     PropertyEntity property,
     String currentUserId,
   ) {
-    final isOnHold = property.status == ListingStatus.paused;
-    final isLive = property.status == ListingStatus.published ||
-        property.status == ListingStatus.approved ||
-        property.status == ListingStatus.active;
+    final isOnHold = property.isPaused || property.status == ListingStatus.paused;
+    final isLive = (property.status == ListingStatus.published ||
+            property.status == ListingStatus.approved ||
+            property.status == ListingStatus.active) &&
+        !property.isPaused;
 
     final textP = AppDesignSystem.textP(context);
     final textS = AppDesignSystem.textS(context);
     final cardBg = AppDesignSystem.cardBg(context);
     final borderCol = AppDesignSystem.borderCol(context);
     final isDark = AppDesignSystem.isDark(context);
-
-    final coverMedia = property.mediaList.where((m) => m.isCover).firstOrNull ??
-        property.mediaList.firstOrNull;
 
     final areaSqft = property.specifications.carpetArea ??
         property.specifications.superBuiltUpArea ??
@@ -446,7 +352,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
                   height: 150,
                   width: double.infinity,
                   child: AppPropertyImage(
-                    imageUrl: coverMedia?.mediaUrl,
+                    imageUrl: PropertyMediaResolver.getCoverUrl(property),
                     height: 150,
                     width: double.infinity,
                     fit: BoxFit.cover,
@@ -482,27 +388,33 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: switch (property.status) {
-                      ListingStatus.active || ListingStatus.published || ListingStatus.approved => const Color(0xFF10B981),
-                      ListingStatus.pendingVerification || ListingStatus.submitted || ListingStatus.underReview => const Color(0xFFD97706),
-                      ListingStatus.rejected => const Color(0xFFDC2626),
-                      ListingStatus.sold => const Color(0xFF2563EB),
-                      ListingStatus.paused => Colors.amber.shade900,
-                      _ => const Color(0xFF64748B),
-                    },
+                    color: property.isListingExpired
+                        ? Colors.orange.shade800
+                        : (isOnHold
+                            ? Colors.amber.shade900
+                            : switch (property.status) {
+                                ListingStatus.active || ListingStatus.published || ListingStatus.approved => const Color(0xFF10B981),
+                                ListingStatus.pendingVerification || ListingStatus.submitted || ListingStatus.underReview => const Color(0xFFD97706),
+                                ListingStatus.rejected => const Color(0xFFDC2626),
+                                ListingStatus.sold => const Color(0xFF2563EB),
+                                _ => const Color(0xFF64748B),
+                              }),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    switch (property.status) {
-                      ListingStatus.draft => 'Draft',
-                      ListingStatus.pendingVerification || ListingStatus.submitted || ListingStatus.underReview => 'Pending Verification',
-                      ListingStatus.active || ListingStatus.published || ListingStatus.approved => 'Active',
-                      ListingStatus.rejected => 'Rejected',
-                      ListingStatus.sold => 'Sold',
-                      ListingStatus.archived => 'Archived',
-                      ListingStatus.paused => 'On Hold',
-                      _ => 'Pending Verification',
-                    },
+                    property.isListingExpired
+                        ? 'Expired / Not Public'
+                        : (isOnHold
+                            ? 'On Hold'
+                            : switch (property.status) {
+                                ListingStatus.draft => 'Draft',
+                                ListingStatus.pendingVerification || ListingStatus.submitted || ListingStatus.underReview => 'Pending Verification',
+                                ListingStatus.active || ListingStatus.published || ListingStatus.approved => 'Active',
+                                ListingStatus.rejected => 'Rejected',
+                                ListingStatus.sold => 'Sold',
+                                ListingStatus.archived => 'Archived',
+                                _ => 'Pending Verification',
+                              }),
                     style: const TextStyle(
                       fontFamily: AppDesignSystem.fontFamily,
                       fontSize: 10,
@@ -587,7 +499,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
                 const SizedBox(height: 12),
 
                 // Promote Listing Button (if eligible)
-                if (property.status == ListingStatus.published || property.status == ListingStatus.active || property.status == ListingStatus.approved) ...[
+                if (isLive) ...[
                   SizedBox(
                     width: double.infinity,
                     height: 34,
@@ -605,6 +517,70 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                ],
+
+                // Expired Listing Notice & One-Click Reactivation Ready Banner
+                if (property.isListingExpired) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2A1B0E) : const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.shade400),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.schedule_rounded, size: 16, color: Colors.orange.shade800),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Expired — Not Public',
+                              style: TextStyle(
+                                fontFamily: AppDesignSystem.fontFamily,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: isDark ? Colors.orange.shade300 : Colors.orange.shade900,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Your listing data is safe in your private Vault. Choose a plan to restore public visibility.',
+                          style: TextStyle(
+                            fontFamily: AppDesignSystem.fontFamily,
+                            fontSize: 11,
+                            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 32,
+                          child: ElevatedButton.icon(
+                            onPressed: () => context.push('/pricing-plans', extra: {
+                              'propertyId': property.id,
+                              'productFamily': property.isCommercial ? 'commercial_listing' : 'residential_listing',
+                            }),
+                            icon: const Icon(Icons.refresh_rounded, size: 14),
+                            label: const Text(
+                              'Reactivate / Choose Plan',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppDesignSystem.brandGold,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
 
                 // Customer Action Buttons tailored strictly to allowed lifecycle rules
@@ -632,11 +608,9 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
                         property.status != ListingStatus.archived)
                       OutlinedButton.icon(
                         onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => AddPropertyWizardView(editProperty: property),
-                            ),
+                          context.push(
+                            '/edit-property/${property.id}',
+                            extra: property,
                           ).then((_) => _loadUserProperties());
                         },
                         icon: const Icon(Icons.edit_outlined, size: 13),
@@ -713,15 +687,33 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
                         ),
                       ),
 
-                    // 6. Delete Button (Allowed if Draft, Paused, Rejected, Archived; Forbidden if Disputed or Sold)
+                    // 6. Archive Button (Soft unlist preserving data history)
                     if (property.status != ListingStatus.disputed &&
                         property.status != ListingStatus.sold &&
                         property.status != ListingStatus.rented &&
-                        property.status != ListingStatus.leased)
+                        property.status != ListingStatus.leased &&
+                        property.status != ListingStatus.archived)
                       OutlinedButton.icon(
-                        onPressed: () => _showDeleteConfirmation(context, property, currentUserId),
-                        icon: const Icon(Icons.delete_outline_rounded, size: 13),
-                        label: const Text('Delete', style: TextStyle(fontSize: 11)),
+                        onPressed: () => _showArchiveConfirmation(context, property, currentUserId),
+                        icon: const Icon(Icons.archive_outlined, size: 13),
+                        label: const Text('Archive', style: TextStyle(fontSize: 11)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF64748B),
+                          side: const BorderSide(color: Color(0xFF64748B)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+
+                    // 7. Permanent Delete Button (Owner hard delete from DB & Storage)
+                    if (property.status != ListingStatus.disputed)
+                      OutlinedButton.icon(
+                        onPressed: () => _showDeletePermanentlyConfirmation(context, property, currentUserId),
+                        icon: const Icon(Icons.delete_forever_rounded, size: 13),
+                        label: Text(
+                          property.status == ListingStatus.draft ? 'Delete Draft' : 'Delete',
+                          style: const TextStyle(fontSize: 11),
+                        ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFFEF4444),
                           side: const BorderSide(color: Color(0xFFEF4444)),
@@ -750,6 +742,55 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
     IconData icon;
     String headline;
     String subtext;
+
+    if (property.isPaused || property.status == ListingStatus.paused) {
+      bgColor = isDark ? const Color(0xFF1C1000) : const Color(0xFFFFF7ED);
+      iconColor = const Color(0xFFF59E0B);
+      textColor = const Color(0xFF92400E);
+      icon = Icons.pause_circle_outline_rounded;
+      headline = 'On Hold';
+      subtext = 'Your listing is temporarily hidden from public search. Resume anytime.';
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: iconColor.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: iconColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headline,
+                    style: TextStyle(
+                      fontFamily: AppDesignSystem.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtext,
+                    style: TextStyle(
+                      fontFamily: AppDesignSystem.fontFamily,
+                      fontSize: 11,
+                      color: textColor.withValues(alpha: 0.8),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     switch (property.status) {
       case ListingStatus.draft:
@@ -873,14 +914,14 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
     PropertyEntity property,
     String currentUserId,
   ) async {
-    final isOnHold = property.status == ListingStatus.paused;
+    final isOnHold = property.isPaused || property.status == ListingStatus.paused;
     final notifier = ref.read(myPropertiesNotifierProvider.notifier);
 
     final success = isOnHold
         ? await notifier.resumeProperty(authenticatedUserId: currentUserId, propertyId: property.id)
         : await notifier.holdProperty(authenticatedUserId: currentUserId, propertyId: property.id);
 
-    if (mounted) {
+    if (context.mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -990,7 +1031,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
     );
   }
 
-  void _showDeleteConfirmation(
+  void _showArchiveConfirmation(
     BuildContext context,
     PropertyEntity property,
     String currentUserId,
@@ -1009,7 +1050,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
           side: BorderSide(color: borderCol),
         ),
         title: Text(
-          'Delete Property?',
+          'Archive Property Listing?',
           style: TextStyle(
             fontFamily: AppDesignSystem.fontFamily,
             fontSize: 18,
@@ -1018,7 +1059,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
           ),
         ),
         content: Text(
-          'This property will be removed from your listings.',
+          'This listing will be safely archived and unlisted from the public marketplace. You can view it under your account history anytime.',
           style: TextStyle(
             fontFamily: AppDesignSystem.fontFamily,
             fontSize: 13,
@@ -1028,10 +1069,98 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: textS, fontWeight: FontWeight.w600),
+            child: Text('Cancel', style: TextStyle(color: textS, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await ref
+                  .read(myPropertiesNotifierProvider.notifier)
+                  .archiveProperty(authenticatedUserId: currentUserId, propertyId: property.id);
+
+              if (context.mounted) {
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Property safely archived.'),
+                      backgroundColor: Color(0xFF10B981),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ref.read(myPropertiesNotifierProvider).errorMessage ?? 'Failed to archive property.',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF64748B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
+            child: const Text('Archive', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeletePermanentlyConfirmation(
+    BuildContext context,
+    PropertyEntity property,
+    String currentUserId,
+  ) {
+    final textP = AppDesignSystem.textP(context);
+    final textS = AppDesignSystem.textS(context);
+    final surfaceBg = AppDesignSystem.surfaceBg(context);
+    final borderCol = AppDesignSystem.borderCol(context);
+
+    final isDraft = property.status == ListingStatus.draft;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: surfaceBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: borderCol),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isDraft ? 'Delete Draft Property?' : 'Delete Permanently?',
+                style: TextStyle(
+                  fontFamily: AppDesignSystem.fontFamily,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: textP,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          isDraft
+              ? 'This draft property and any uploaded files will be permanently deleted.'
+              : 'CAUTION: This will permanently delete this property listing, all associated media photos, and storage files. This action CANNOT be undone.',
+          style: TextStyle(
+            fontFamily: AppDesignSystem.fontFamily,
+            fontSize: 13,
+            color: textS,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: TextStyle(color: textS, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1043,9 +1172,9 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
               if (context.mounted) {
                 if (success) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Property deleted successfully.'),
-                      backgroundColor: Color(0xFF10B981),
+                    SnackBar(
+                      content: Text(isDraft ? 'Draft deleted successfully.' : 'Property permanently deleted.'),
+                      backgroundColor: const Color(0xFF10B981),
                     ),
                   );
                 } else {
@@ -1065,7 +1194,7 @@ class _MyPropertiesListViewState extends ConsumerState<MyPropertiesListView> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Delete Permanently', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),

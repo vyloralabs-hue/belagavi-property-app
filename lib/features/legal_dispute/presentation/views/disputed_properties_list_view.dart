@@ -93,7 +93,6 @@ class _DisputedPropertiesListViewState
   }
 
   void _showFilterModal(BuildContext context) {
-    final state = ref.read(disputedPropertiesNotifierProvider);
     final notifier = ref.read(disputedPropertiesNotifierProvider.notifier);
 
     showModalBottomSheet(

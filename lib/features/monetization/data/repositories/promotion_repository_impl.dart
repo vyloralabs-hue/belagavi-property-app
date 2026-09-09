@@ -76,6 +76,17 @@ class PromotionRepositoryImpl implements PromotionRepository {
             .from('property_promotions')
             .insert(entity.toJson());
       } catch (_) {}
+
+      // Synchronize promotion metadata directly to public.properties for instant high-performance indexing
+      try {
+        await _supabaseService.from('properties').update({
+          'is_featured': true,
+          'promotion_active': true,
+          'promotion_ends_at': endAt.toIso8601String(),
+          'promotion_tier': promotionType.name,
+          'updated_at': now.toIso8601String(),
+        }).eq('id', property.id);
+      } catch (_) {}
     }
 
     _promotions[entity.id] = entity;

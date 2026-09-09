@@ -1,6 +1,7 @@
 import 'package:injectable/injectable.dart';
 import '../../../../core/backend/base_remote_datasource.dart';
 import '../../../../core/backend/supabase_service.dart';
+import '../../../../core/geo/geo_math.dart';
 import '../../../property/data/models/property_models.dart';
 import '../../../property/domain/entities/property_entities.dart';
 import '../../../property/utils/location_privacy_helper.dart';
@@ -50,43 +51,57 @@ class PropertySearchRemoteDataSourceImpl extends BaseRemoteDataSource
       } else {
         q = q.eq('status', query.status!.dbValue);
       }
+      q = q.eq('is_paused', false);
 
-      // ── Normalize Location Inputs against canonical directory & aliases ──────
-      final normState = query.state != null && query.state!.isNotEmpty
-          ? IndiaLocationDirectory.normalizeStateName(query.state!)
-          : null;
-      final normCity = query.city != null && query.city!.isNotEmpty
-          ? IndiaLocationDirectory.normalizeCityName(query.city!)
-          : null;
-      String? normLocality = query.locality != null && query.locality!.isNotEmpty
-          ? IndiaLocationDirectory.normalizeLocalityName(query.locality!, normCity)
-          : null;
+      // ── Bounding-box filter (server-side candidate reduction) ───────────────
+      final hasBoundingBox = query.minLatitude != null &&
+          query.maxLatitude != null &&
+          query.minLongitude != null &&
+          query.maxLongitude != null;
 
-      // ── City + Locality Parent Validation ────────────────────────────────────
-      // If city and locality are both specified, ensure locality belongs to city.
-      // e.g. Bengaluru + Tilakwadi -> clear invalid locality 'Tilakwadi'
-      if (normCity != null && normCity.isNotEmpty && normLocality != null && normLocality.isNotEmpty) {
-        final cityLocalities = IndiaLocationDirectory.getLocalitiesForCity(normCity);
-        if (cityLocalities.isNotEmpty && !cityLocalities.contains(normLocality)) {
-          // Check if locality belongs to a known different city
-          final belongsToOtherCity = IndiaLocationDirectory.directoryEntries.any((entry) {
-            final entryLoc = entry['name'] as String;
-            final entryCity = entry['city'] as String;
-            return entryLoc.toLowerCase() == normLocality!.toLowerCase() &&
-                entryCity.toLowerCase() != normCity.toLowerCase();
-          });
-          if (belongsToOtherCity) {
-            normLocality = null; // Clear incompatible child locality
+      if (hasBoundingBox) {
+        q = q
+            .gte('latitude', query.minLatitude!)
+            .lte('latitude', query.maxLatitude!)
+            .gte('longitude', query.minLongitude!)
+            .lte('longitude', query.maxLongitude!);
+      } else {
+        // ── Normalize Location Inputs against canonical directory & aliases ──────
+        final normState = query.state != null && query.state!.isNotEmpty
+            ? IndiaLocationDirectory.normalizeStateName(query.state!)
+            : null;
+        final normCity = query.city != null && query.city!.isNotEmpty
+            ? IndiaLocationDirectory.normalizeCityName(query.city!)
+            : null;
+        String? normLocality = query.locality != null && query.locality!.isNotEmpty
+            ? IndiaLocationDirectory.normalizeLocalityName(query.locality!, normCity)
+            : null;
+
+        // ── City + Locality Parent Validation ────────────────────────────────────
+        // If city and locality are both specified, ensure locality belongs to city.
+        if (normCity != null && normCity.isNotEmpty && normLocality != null && normLocality.isNotEmpty) {
+          final cityLocalities = IndiaLocationDirectory.getLocalitiesForCity(normCity);
+          if (cityLocalities.isNotEmpty && !cityLocalities.contains(normLocality)) {
+            // Check if locality belongs to a known different city
+            final belongsToOtherCity = IndiaLocationDirectory.directoryEntries.any((entry) {
+              final entryLoc = entry['name'] as String;
+              final entryCity = entry['city'] as String;
+              return entryLoc.toLowerCase() == normLocality!.toLowerCase() &&
+                  entryCity.toLowerCase() != normCity.toLowerCase();
+            });
+            if (belongsToOtherCity) {
+              normLocality = null; // Clear incompatible child locality
+            }
           }
         }
-      }
 
-      // ── Location hierarchy filters (real indexed columns only) ──────────────
-      if (normState != null && normState.isNotEmpty) q = q.eq('state', normState);
-      if (query.district != null && query.district!.isNotEmpty) q = q.eq('district', query.district!);
-      if (normCity != null && normCity.isNotEmpty) q = q.eq('city', normCity);
-      if (normLocality != null && normLocality.isNotEmpty) q = q.eq('locality', normLocality);
-      if (query.pincode != null && query.pincode!.isNotEmpty) q = q.eq('pincode', query.pincode!);
+        // ── Location hierarchy filters (real indexed columns only) ──────────────
+        if (normState != null && normState.isNotEmpty) q = q.eq('state', normState);
+        if (query.district != null && query.district!.isNotEmpty) q = q.eq('district', query.district!);
+        if (normCity != null && normCity.isNotEmpty) q = q.eq('city', normCity);
+        if (normLocality != null && normLocality.isNotEmpty) q = q.eq('locality', normLocality);
+        if (query.pincode != null && query.pincode!.isNotEmpty) q = q.eq('pincode', query.pincode!);
+      }
 
 
 
@@ -126,18 +141,19 @@ class PropertySearchRemoteDataSourceImpl extends BaseRemoteDataSource
         );
       }
 
-      // ── Sort order ───────────────────────────────────────────────────────────
+      // ── Sort order (Promoted/Featured first, then primary sort) ────────────
+      var sortedQ = q.order('is_featured', ascending: false);
       dynamic finalQ;
       switch (query.sortBy) {
         case 'price_asc':
-          finalQ = q.order('price', ascending: true);
+          finalQ = sortedQ.order('price', ascending: true);
         case 'price_desc':
-          finalQ = q.order('price', ascending: false);
+          finalQ = sortedQ.order('price', ascending: false);
         case 'area_desc':
           // Use carpet_area (real column) for area sorting
-          finalQ = q.order('carpet_area', ascending: false);
+          finalQ = sortedQ.order('carpet_area', ascending: false);
         default:
-          finalQ = q.order('created_at', ascending: false);
+          finalQ = sortedQ.order('updated_at', ascending: false);
       }
 
       // ── Paged bounded query — NEVER unbounded ────────────────────────────────
@@ -153,11 +169,20 @@ class PropertySearchRemoteDataSourceImpl extends BaseRemoteDataSource
         } else {
           countQ = countQ.eq('status', query.status!.dbValue);
         }
-        if (query.state != null && query.state!.isNotEmpty) countQ = countQ.eq('state', query.state!);
-        if (query.district != null && query.district!.isNotEmpty) countQ = countQ.eq('district', query.district!);
-        if (query.city != null && query.city!.isNotEmpty) countQ = countQ.eq('city', query.city!);
-        if (query.locality != null && query.locality!.isNotEmpty) countQ = countQ.ilike('locality', '%${query.locality}%');
-        if (query.pincode != null && query.pincode!.isNotEmpty) countQ = countQ.eq('pincode', query.pincode!);
+        countQ = countQ.eq('is_paused', false);
+        if (hasBoundingBox) {
+          countQ = countQ
+              .gte('latitude', query.minLatitude!)
+              .lte('latitude', query.maxLatitude!)
+              .gte('longitude', query.minLongitude!)
+              .lte('longitude', query.maxLongitude!);
+        } else {
+          if (query.state != null && query.state!.isNotEmpty) countQ = countQ.eq('state', query.state!);
+          if (query.district != null && query.district!.isNotEmpty) countQ = countQ.eq('district', query.district!);
+          if (query.city != null && query.city!.isNotEmpty) countQ = countQ.eq('city', query.city!);
+          if (query.locality != null && query.locality!.isNotEmpty) countQ = countQ.ilike('locality', '%${query.locality}%');
+          if (query.pincode != null && query.pincode!.isNotEmpty) countQ = countQ.eq('pincode', query.pincode!);
+        }
         if (query.category != null) countQ = countQ.eq('category', query.category!.dbValue);
         if (query.minPrice != null) countQ = countQ.gte('price', query.minPrice!);
         if (query.maxPrice != null) countQ = countQ.lte('price', query.maxPrice!);
@@ -180,9 +205,42 @@ class PropertySearchRemoteDataSourceImpl extends BaseRemoteDataSource
             : query.offset + rawList.length;
       }
 
-      final publicList = rawList
+      var publicList = rawList
           .map((m) => LocationPrivacyHelper.toPublicPropertyModel(m))
           .toList();
+
+      // If radial distance search is active, compute precise Haversine distance and filter
+      if (query.centerLatitude != null && query.centerLongitude != null && query.radiusKm != null) {
+        publicList = publicList.where((p) {
+          if (p.latitude == null || p.longitude == null) return false;
+          final dist = GeoMath.calculateDistanceKm(
+            lat1: query.centerLatitude!,
+            lon1: query.centerLongitude!,
+            lat2: p.latitude!,
+            lon2: p.longitude!,
+          );
+          return dist <= query.radiusKm!;
+        }).toList();
+
+        // Sort by distance ascending if default sort
+        if (query.sortBy == 'created_at_desc') {
+          publicList.sort((a, b) {
+            final distA = GeoMath.calculateDistanceKm(
+              lat1: query.centerLatitude!,
+              lon1: query.centerLongitude!,
+              lat2: a.latitude!,
+              lon2: a.longitude!,
+            );
+            final distB = GeoMath.calculateDistanceKm(
+              lat1: query.centerLatitude!,
+              lon1: query.centerLongitude!,
+              lat2: b.latitude!,
+              lon2: b.longitude!,
+            );
+            return distA.compareTo(distB);
+          });
+        }
+      }
 
       return SearchResultModel(
         properties: publicList,

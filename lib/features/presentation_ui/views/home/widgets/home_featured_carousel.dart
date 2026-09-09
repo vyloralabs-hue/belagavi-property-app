@@ -5,6 +5,7 @@ import '../../../theme/app_design_system.dart';
 import '../../../../property/domain/entities/property_entities.dart';
 import '../../../../property/presentation/providers/property_providers.dart';
 import '../../../../property/presentation/widgets/app_property_image.dart';
+import '../../../../property/services/property_media_resolver.dart';
 import '../../../../auth/utils/auth_session_storage_helper.dart';
 
 /// Featured Carousel — Master UI/UX Design Blueprint
@@ -257,9 +258,8 @@ class _CarouselPropertyCardState extends State<_CarouselPropertyCard> {
   Widget build(BuildContext context) {
     final p = widget.item;
     final mediaList = p.mediaList;
-    final coverMedia = mediaList.isNotEmpty
-        ? mediaList.firstWhere((m) => m.isCover, orElse: () => mediaList.first)
-        : null;
+    final coverMedia = mediaList.where((m) => m.isCover).firstOrNull ??
+        mediaList.firstOrNull;
 
     final textP = AppDesignSystem.textP(context);
     final cardBg = AppDesignSystem.cardBg(context);
@@ -295,7 +295,8 @@ class _CarouselPropertyCardState extends State<_CarouselPropertyCard> {
                       top: Radius.circular(16),
                     ),
                     child: AppPropertyImage(
-                      imageUrl: coverMedia?.mediaUrl,
+                      imageUrl: coverMedia?.mediaUrl ??
+                          PropertyMediaResolver.getCoverUrl(p),
                       height: 148,
                       width: double.infinity,
                       fit: BoxFit.cover,

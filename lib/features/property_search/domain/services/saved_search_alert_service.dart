@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../../../core/geo/geo_math.dart';
 import '../entities/saved_search_entity.dart';
 import '../entities/search_entities.dart';
 import '../../../property/domain/entities/property_entities.dart';
@@ -86,20 +87,37 @@ class SavedSearchAlertService {
       if (bedrooms < query.minBedrooms!) return false;
     }
 
-    // 6. Location Match (City, Locality, District, State)
-    if (query.city != null && query.city!.isNotEmpty) {
-      if (property.city.toLowerCase() != query.city!.toLowerCase()) {
-        return false;
+    // 6. Location Match (City, Locality, District, State, or Radial bounds)
+    if (query.centerLatitude != null && query.centerLongitude != null && query.radiusKm != null) {
+      if (property.latitude == null || property.longitude == null) return false;
+      final distanceKm = GeoMath.calculateDistanceKm(
+        lat1: query.centerLatitude!,
+        lon1: query.centerLongitude!,
+        lat2: property.latitude!,
+        lon2: property.longitude!,
+      );
+      if (distanceKm > query.radiusKm!) return false;
+    } else {
+      if (query.state != null && query.state!.isNotEmpty) {
+        if (property.state.toLowerCase() != query.state!.toLowerCase()) return false;
       }
-    }
-    if (query.locality != null && query.locality!.isNotEmpty) {
-      if (!property.locality.toLowerCase().contains(query.locality!.toLowerCase())) {
-        return false;
+      if (query.district != null && query.district!.isNotEmpty) {
+        if (property.district.toLowerCase() != query.district!.toLowerCase()) return false;
       }
-    }
-    if (query.pincode != null && query.pincode!.isNotEmpty) {
-      if (property.pincode != query.pincode) {
-        return false;
+      if (query.city != null && query.city!.isNotEmpty) {
+        if (property.city.toLowerCase() != query.city!.toLowerCase()) {
+          return false;
+        }
+      }
+      if (query.locality != null && query.locality!.isNotEmpty) {
+        if (!property.locality.toLowerCase().contains(query.locality!.toLowerCase())) {
+          return false;
+        }
+      }
+      if (query.pincode != null && query.pincode!.isNotEmpty) {
+        if (property.pincode != query.pincode) {
+          return false;
+        }
       }
     }
 

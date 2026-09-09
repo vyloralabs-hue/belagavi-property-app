@@ -1,5 +1,27 @@
 {
   "dependencies": {
     "firebase-admin": "^14.3.0"
-  }
+  },
+  "name": "belagavi-property",
+  "version": "1.0.0",
+  "description": "A new Flutter project.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vyloralabs-hue/belagavi-property-app.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/vyloralabs-hue/belagavi-property-app/issues"
+  },
+  "homepage": "https://github.com/vyloralabs-hue/belagavi-property-app#readme"
 }

@@ -1,3 +1,4 @@
+import '../domain/entities/india_administrative_hierarchy.dart';
 import '../domain/entities/user_location_context.dart';
 
 class IndiaLocationDirectory {
@@ -410,6 +411,9 @@ class IndiaLocationDirectory {
     return null;
   }
 
+  static List<LocationCandidate> searchLocations(String query, {int limit = 15}) =>
+      search(query, limit: limit);
+
   static List<LocationCandidate> search(String query, {int limit = 15}) {
     final norm = normalize(query);
     if (norm.isEmpty) return const [];
@@ -417,7 +421,70 @@ class IndiaLocationDirectory {
     final results = <LocationCandidate>[];
     final seenIds = <String>{};
 
-    // 1. Check City Exact / Alias Matches
+    // 0. Check States & UTs Matches
+    for (final s in IndiaAdministrativeHierarchy.allStatesAndUTs) {
+      final match = normalize(s.name).contains(norm) ||
+          s.code.toLowerCase() == norm ||
+          s.aliases.any((a) => normalize(a).contains(norm));
+      if (match) {
+        final id = 'state_${s.code.toLowerCase()}';
+        if (seenIds.add(id)) {
+          results.add(
+            LocationCandidate(
+              id: id,
+              name: s.name,
+              subtitle: s.isUnionTerritory ? 'Union Territory of India' : 'State of India',
+              type: LocationCandidateType.state,
+              cityName: '',
+              stateName: s.name,
+              stateCode: s.code,
+            ),
+          );
+        }
+      }
+    }
+
+    // 1. Check Districts & Taluks
+    for (final d in IndiaAdministrativeHierarchy.districts) {
+      if (normalize(d.name).contains(norm) || d.aliases.any((a) => normalize(a).contains(norm))) {
+        final id = 'dist_${d.name.toLowerCase()}';
+        if (seenIds.add(id)) {
+          results.add(
+            LocationCandidate(
+              id: id,
+              name: d.name,
+              subtitle: '${d.stateName} District',
+              type: LocationCandidateType.city,
+              cityName: d.name,
+              stateName: d.stateName,
+              stateCode: d.stateCode,
+            ),
+          );
+        }
+      }
+
+      for (final t in d.taluks) {
+        if (normalize(t).contains(norm)) {
+          final id = 'taluk_${t.toLowerCase()}_${d.name.toLowerCase()}';
+          if (seenIds.add(id)) {
+            results.add(
+              LocationCandidate(
+                id: id,
+                name: t,
+                subtitle: '${d.name} District, ${d.stateName}',
+                type: LocationCandidateType.taluk,
+                cityName: d.name,
+                stateName: d.stateName,
+                stateCode: d.stateCode,
+                talukName: t,
+              ),
+            );
+          }
+        }
+      }
+    }
+
+    // 2. Check City Exact / Alias Matches
     for (final city in popularCities) {
       final cityName = city['name'] as String;
       final stateName = city['state'] as String;
@@ -592,6 +659,31 @@ class IndiaLocationDirectory {
     return cleanLoc;
   }
 
+
+  /// The 15 official administrative taluks of Belagavi District, Karnataka
+  static const List<String> belagaviTaluks = [
+    'Belagavi',
+    'Gokak',
+    'Chikkodi',
+    'Bailhongal',
+    'Athani',
+    'Savadatti',
+    'Ramdurg',
+    'Hukkeri',
+    'Khanapur',
+    'Raybag',
+    'Kagawad',
+    'Kittur',
+    'Mudalgi',
+    'Nippani',
+    'Yaragatti',
+  ];
+
+  /// Returns true if a given name is an official taluk of Belagavi District
+  static bool isBelagaviTaluk(String name) {
+    final clean = name.trim().toLowerCase();
+    return belagaviTaluks.any((t) => t.toLowerCase() == clean);
+  }
 
   /// Returns list of localities belonging strictly to the specified city.
   static List<String> getLocalitiesForCity(String city) {

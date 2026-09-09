@@ -10,8 +10,9 @@ import 'package:belagavi_property/features/property_search/domain/entities/user_
 import 'package:belagavi_property/features/property_search/presentation/providers/property_search_notifier.dart';
 import 'package:belagavi_property/features/property_search/presentation/providers/user_location_notifier.dart';
 import 'package:belagavi_property/features/presentation_ui/views/search/widgets/universal_location_search_modal.dart';
-import 'package:belagavi_property/features/auth/utils/auth_session_storage_helper.dart';
 import 'package:belagavi_property/features/property/presentation/widgets/app_property_image.dart';
+import 'package:belagavi_property/features/property/services/property_media_resolver.dart';
+import 'package:belagavi_property/features/auth/utils/auth_session_storage_helper.dart';
 
 /// Dedicated Category Landing Page
 /// Supports Residential, Plots/Layouts, Commercial, and Raw Land with mandatory top List Property CTA
@@ -831,11 +832,7 @@ class _CategoryLandingViewState extends ConsumerState<CategoryLandingView> {
       ),
     );
 
-    final coverPhoto = prop.mediaList.isNotEmpty
-        ? prop.mediaList
-              .firstWhere((m) => m.isCover, orElse: () => prop.mediaList.first)
-              .mediaUrl
-        : '';
+    final coverPhoto = PropertyMediaResolver.getCoverUrl(prop);
 
     final listingTypeStr = (prop.features['listingType'] ?? 'FOR_SALE')
         .toString()

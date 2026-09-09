@@ -33,6 +33,12 @@ abstract class DisputeRepository {
     UserRole? userRole,
   });
 
+  FutureEither<PropertyDisputeEntity> updateDispute(
+    PropertyDisputeEntity dispute, {
+    required String authenticatedUserId,
+    UserRole? userRole,
+  });
+
   FutureEither<PropertyDisputeEntity> updateDisputeStatus({
     required String disputeId,
     required DisputeVerificationStatus newStatus,
@@ -66,5 +72,6 @@ abstract class DisputeRepository {
     required String disputeId,
     required String fileName,
     required Uint8List fileBytes,
+    String? authenticatedUserId,
   });
 }

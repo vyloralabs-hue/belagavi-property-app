@@ -236,6 +236,120 @@ class UserLocationNotifier extends Notifier<UserLocationState> {
     _syncSearch(newContext);
   }
 
+  Future<void> selectNearMe({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 10.0,
+    String? localityName,
+    String? cityName,
+  }) async {
+    final newContext = UserLocationContext(
+      countryCode: 'IN',
+      countryName: 'India',
+      cityName: cityName,
+      localityName: localityName,
+      latitude: latitude,
+      longitude: longitude,
+      radiusKm: radiusKm,
+      hasExplicitSelection: true,
+      isAllIndia: false,
+      mode: DiscoveryLocationMode.nearMe,
+    );
+
+    await _persist(newContext);
+    _syncSearch(newContext);
+  }
+
+  Future<void> selectMapArea({
+    required double centerLatitude,
+    required double centerLongitude,
+    double radiusKm = 10.0,
+    String? localityName,
+    String? cityName,
+  }) async {
+    final newContext = UserLocationContext(
+      countryCode: 'IN',
+      countryName: 'India',
+      cityName: cityName,
+      localityName: localityName,
+      latitude: centerLatitude,
+      longitude: centerLongitude,
+      radiusKm: radiusKm,
+      hasExplicitSelection: true,
+      isAllIndia: false,
+      mode: DiscoveryLocationMode.exploreMap,
+    );
+
+    await _persist(newContext);
+    _syncSearch(newContext);
+  }
+
+  Future<void> updateRadius(double newRadiusKm) async {
+    final current = state.current;
+    if (current.latitude == null || current.longitude == null) return;
+
+    final updated = current.copyWith(radiusKm: newRadiusKm);
+    await _persist(updated);
+    _syncSearch(updated);
+  }
+
+  Future<void> selectState(String stateName, {String? stateCode}) async {
+    final newContext = UserLocationContext(
+      countryCode: 'IN',
+      countryName: 'India',
+      stateCode: stateCode,
+      stateName: stateName,
+      hasExplicitSelection: true,
+      isAllIndia: false,
+      mode: DiscoveryLocationMode.chooseLocation,
+    );
+
+    await _persist(newContext);
+    _syncSearch(newContext);
+  }
+
+  Future<void> selectDistrict(
+    String districtName, {
+    required String stateName,
+    String? stateCode,
+  }) async {
+    final newContext = UserLocationContext(
+      countryCode: 'IN',
+      countryName: 'India',
+      stateCode: stateCode,
+      stateName: stateName,
+      districtName: districtName,
+      hasExplicitSelection: true,
+      isAllIndia: false,
+      mode: DiscoveryLocationMode.chooseLocation,
+    );
+
+    await _persist(newContext);
+    _syncSearch(newContext);
+  }
+
+  Future<void> selectTaluk(
+    String talukName, {
+    required String districtName,
+    required String stateName,
+    String? stateCode,
+  }) async {
+    final newContext = UserLocationContext(
+      countryCode: 'IN',
+      countryName: 'India',
+      stateCode: stateCode,
+      stateName: stateName,
+      districtName: districtName,
+      talukName: talukName,
+      hasExplicitSelection: true,
+      isAllIndia: false,
+      mode: DiscoveryLocationMode.chooseLocation,
+    );
+
+    await _persist(newContext);
+    _syncSearch(newContext);
+  }
+
   Future<void> selectAllIndia() async {
     const newContext = UserLocationContext.allIndia;
     await _persist(newContext);

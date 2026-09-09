@@ -52,6 +52,8 @@ class PropertyStatusWorkflow {
           targetStatus == ListingStatus.archived,
       ListingStatus.paused => targetStatus == ListingStatus.published ||
           targetStatus == ListingStatus.active ||
+          targetStatus == ListingStatus.sold ||
+          targetStatus == ListingStatus.rented ||
           targetStatus == ListingStatus.disputed ||
           targetStatus == ListingStatus.archived,
       ListingStatus.rejected => targetStatus == ListingStatus.draft ||
@@ -108,10 +110,28 @@ class PropertyStatusWorkflow {
       if (currentStatus == ListingStatus.rejected && (targetStatus == ListingStatus.draft || targetStatus == ListingStatus.submitted)) {
         return true;
       }
-      if ((currentStatus == ListingStatus.published || currentStatus == ListingStatus.active) && (targetStatus == ListingStatus.paused || targetStatus == ListingStatus.archived)) {
+      if ((currentStatus == ListingStatus.published || currentStatus == ListingStatus.active) &&
+          (targetStatus == ListingStatus.paused ||
+              targetStatus == ListingStatus.archived ||
+              targetStatus == ListingStatus.sold ||
+              targetStatus == ListingStatus.rented)) {
         return true;
       }
-      if (currentStatus == ListingStatus.paused && (targetStatus == ListingStatus.published || targetStatus == ListingStatus.active || targetStatus == ListingStatus.archived)) {
+      if (currentStatus == ListingStatus.paused &&
+          (targetStatus == ListingStatus.published ||
+              targetStatus == ListingStatus.active ||
+              targetStatus == ListingStatus.archived ||
+              targetStatus == ListingStatus.sold ||
+              targetStatus == ListingStatus.rented)) {
+        return true;
+      }
+      if (currentStatus == ListingStatus.sold && targetStatus == ListingStatus.archived) {
+        return true;
+      }
+      if (currentStatus == ListingStatus.rented && targetStatus == ListingStatus.archived) {
+        return true;
+      }
+      if (currentStatus == ListingStatus.leased && targetStatus == ListingStatus.archived) {
         return true;
       }
       if (currentStatus == ListingStatus.archived && targetStatus == ListingStatus.draft) {
