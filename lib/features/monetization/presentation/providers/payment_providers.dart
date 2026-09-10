@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import '../../domain/entities/payment_entities.dart';
 import '../../domain/repositories/payment_repository.dart';
 import '../../data/repositories/payment_repository_impl.dart';

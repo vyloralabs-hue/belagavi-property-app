@@ -116,3 +116,102 @@ class BillingRecordEntity extends Equatable {
         createdAt,
       ];
 }
+
+enum DiscountType { percentage, flat }
+
+class RazorpayOrderEntity extends Equatable {
+  final String orderId;
+  final double amount;
+  final String currency;
+  final String receiptId;
+  final String status;
+
+  const RazorpayOrderEntity({
+    required this.orderId,
+    required this.amount,
+    required this.currency,
+    required this.receiptId,
+    required this.status,
+  });
+
+  @override
+  List<Object?> get props => [orderId, amount, currency, receiptId, status];
+}
+
+class InvoiceEntity extends Equatable {
+  final String invoiceId;
+  final String userId;
+  final String planId;
+  final double subtotal;
+  final double discount;
+  final double total;
+  final double taxAmountGst;
+  final String currency;
+  final String pdfUrl;
+  final DateTime createdAt;
+
+  const InvoiceEntity({
+    required this.invoiceId,
+    required this.userId,
+    required this.planId,
+    required this.subtotal,
+    required this.discount,
+    required this.total,
+    this.taxAmountGst = 0.0,
+    this.currency = 'INR',
+    this.pdfUrl = '',
+    required this.createdAt,
+  });
+
+  String get invoiceNumber => invoiceId;
+  double get subtotalAmount => subtotal;
+  double get discountAmount => discount;
+  double get totalPaidAmount => total;
+  DateTime get paidAt => createdAt;
+
+  @override
+  List<Object?> get props => [
+        invoiceId,
+        userId,
+        planId,
+        subtotal,
+        discount,
+        total,
+        taxAmountGst,
+        currency,
+        pdfUrl,
+        createdAt,
+      ];
+}
+
+class PromoCouponEntity extends Equatable {
+  final String code;
+  final DiscountType discountType;
+  final double discountValue;
+  final double minimumOrderAmount;
+  final DateTime expiryDate;
+  final bool isActive;
+
+  const PromoCouponEntity({
+    required this.code,
+    this.discountType = DiscountType.flat,
+    this.discountValue = 0.0,
+    this.minimumOrderAmount = 0.0,
+    required this.expiryDate,
+    this.isActive = true,
+  });
+
+  double get discountPercent => discountType == DiscountType.percentage ? discountValue : 0.0;
+
+  @override
+  List<Object?> get props => [
+        code,
+        discountType,
+        discountValue,
+        minimumOrderAmount,
+        expiryDate,
+        isActive,
+      ];
+}
+
+
