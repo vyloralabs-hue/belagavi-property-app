@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -455,22 +456,32 @@ class _PricingPlansViewState extends ConsumerState<PricingPlansView> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (isMock)
+                  if (!RazorpayCheckoutService.instance.isLiveGatewayConfigured)
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
+                        color: kReleaseMode ? const Color(0xFFFEF2F2) : const Color(0xFFFEF3C7),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFF59E0B)),
+                        border: Border.all(color: kReleaseMode ? const Color(0xFFEF4444) : const Color(0xFFF59E0B)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.info_outline, size: 16, color: Color(0xFFB45309)),
+                          Icon(
+                            kReleaseMode ? Icons.error_outline : Icons.info_outline,
+                            size: 18,
+                            color: kReleaseMode ? const Color(0xFFB91C1C) : const Color(0xFFB45309),
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Live payment gateway credentials pending. Sandbox test checkout available.',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), fontWeight: FontWeight.w600),
+                              kReleaseMode
+                                  ? 'Payments are temporarily unavailable. Live gateway setup in progress.'
+                                  : 'Debug Mode: Live gateway pending. Sandbox checkout enabled.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: kReleaseMode ? const Color(0xFF991B1B) : const Color(0xFF92400E),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -480,7 +491,7 @@ class _PricingPlansViewState extends ConsumerState<PricingPlansView> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: isSubmitting
+                      onPressed: (isSubmitting || (kReleaseMode && !RazorpayCheckoutService.instance.isLiveGatewayConfigured))
                           ? null
                           : () async {
                               setModalState(() => isSubmitting = true);
@@ -504,8 +515,21 @@ class _PricingPlansViewState extends ConsumerState<PricingPlansView> {
                                   return;
                                 }
 
+                                if (kReleaseMode && !RazorpayCheckoutService.instance.isLiveGatewayConfigured) {
+                                  setModalState(() => isSubmitting = false);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Payments are temporarily unavailable.'),
+                                        backgroundColor: Colors.redAccent,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+
                                 if (isMock) {
-                                  // Perform instant server-side verification in mock mode
+                                  // Perform instant server-side verification in mock mode (DEBUG ONLY)
                                   final mockPayId = 'pay_mock_${DateTime.now().millisecondsSinceEpoch}';
                                   final verifyRes = await notifier.completePayment(
                                     orderId: order.orderId,

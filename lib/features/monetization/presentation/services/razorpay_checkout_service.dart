@@ -17,13 +17,16 @@ class RazorpayCheckoutService {
   PaymentFailureCallback? _onFailure;
   ExternalWalletCallback? _onExternalWallet;
 
-  bool get isMockGateway {
+  bool get isLiveGatewayConfigured {
     final key = activeRazorpayKey;
-    return key.isEmpty ||
-        key == 'rzp_live_prod' ||
-        key.contains('placeholder') ||
-        key.contains('dummy');
+    return key.isNotEmpty &&
+        key.startsWith('rzp_live_') &&
+        !key.contains('dummy') &&
+        !key.contains('placeholder') &&
+        key != 'rzp_live_prod';
   }
+
+  bool get isMockGateway => !isLiveGatewayConfigured;
 
   String get activeRazorpayKey {
     try {
@@ -73,6 +76,16 @@ class RazorpayCheckoutService {
     required String userEmail,
     required String userPhone,
   }) {
+    if (kReleaseMode && !isLiveGatewayConfigured) {
+      AppLogger.e('[Razorpay] Payment gateway is not configured for production. Checkout aborted.');
+      _onFailure?.call(PaymentFailureResponse(
+        Razorpay.PAYMENT_CANCELLED,
+        'Payments are temporarily unavailable.',
+        {},
+      ));
+      return;
+    }
+
     if (isMockGateway) {
       AppLogger.w('[Razorpay] Live key is pending (mock gateway mode)');
     }

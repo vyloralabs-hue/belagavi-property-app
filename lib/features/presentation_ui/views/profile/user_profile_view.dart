@@ -612,12 +612,20 @@ class _UserProfileViewState extends ConsumerState<UserProfileView> {
               onTap: () => context.push('/add-property'),
             ),
             _InteractiveActionTile(
-              icon: Icons.domain_rounded,
-              title: 'Builder Project Control Panel',
-              subtitle: 'Manage residential/commercial projects & unit inventory',
-              iconColor: AppDesignSystem.brandGold,
-              onTap: () => context.push('/builder-projects'),
+              icon: Icons.campaign_rounded,
+              title: 'Advertise With Us',
+              subtitle: 'Promote your real estate business with sponsored native banners',
+              iconColor: const Color(0xFFF59E0B),
+              onTap: () => context.push('/advertise-with-us'),
             ),
+            _InteractiveActionTile(
+              icon: Icons.ad_units_rounded,
+              title: 'Ads Moderation (Admin)',
+              subtitle: 'Review direct ad submissions, set active dates & moderation',
+              iconColor: const Color(0xFFEC4899),
+              onTap: () => context.push('/admin/ads'),
+            ),
+
 
             const SizedBox(height: 20),
 

@@ -34,6 +34,7 @@ import '../../features/presentation_ui/views/projects/projects_view.dart';
 import '../../features/presentation_ui/views/monetization/subscription_plans_view.dart';
 import '../../features/presentation_ui/views/monetization/payment_gateway_view.dart';
 import '../../features/presentation_ui/views/admin/ads_management_view.dart';
+import '../../features/advertising/presentation/views/advertise_with_us_view.dart';
 import '../../features/presentation_ui/views/admin/founder_dashboard_view.dart';
 import '../../features/presentation_ui/views/admin/property_verification_queue_view.dart';
 import '../../features/presentation_ui/views/property/add_property_wizard_view.dart';
@@ -300,6 +301,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.adsManagement,
         name: 'ads-management',
         builder: (context, state) => const AdsManagementView(),
+      ),
+      GoRoute(
+        path: '/advertise-with-us',
+        name: 'advertise-with-us',
+        builder: (context, state) => const AdvertiseWithUsView(),
       ),
       GoRoute(
         path: AppRoutes.founderDashboard,

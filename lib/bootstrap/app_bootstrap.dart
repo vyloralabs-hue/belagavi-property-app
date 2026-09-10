@@ -11,6 +11,7 @@ import '../core/constants/env.dart';
 import '../core/constants/env_config.dart';
 import '../core/utils/app_logger.dart';
 import '../core/utils/local_storage.dart';
+import '../features/advertising/data/datasources/admob_service.dart';
 import '../firebase_options.dart';
 import 'bootstrap.dart';
 
@@ -183,6 +184,13 @@ class AppBootstrap {
         AppLogger.i('Application dependencies configured with GetIt.');
       } catch (e) {
         AppLogger.w('GetIt dependencies configuration warning: $e');
+      }
+
+      // 6. Initialize AdMob safely in background
+      try {
+        await AdMobService.instance.initialize();
+      } catch (e) {
+        AppLogger.w('AdMob initialization warning: $e');
       }
 
       _status = BootstrapStatus.success;

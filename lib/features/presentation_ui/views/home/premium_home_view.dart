@@ -8,6 +8,8 @@ import 'widgets/home_property_protection_section.dart';
 import 'widgets/home_real_property_feed.dart';
 import '../../../intelligence/presentation/widgets/home_personalized_feed.dart';
 
+import '../../../advertising/presentation/widgets/ad_slot_widget.dart';
+
 /// Global Premium Responsive Home Screen
 /// Unified Production UI Architecture supporting System, Light & Dark Themes
 /// Reference: Image 1 (Light Mode) & Image 2 (Dark Mode)
@@ -19,6 +21,7 @@ import '../../../intelligence/presentation/widgets/home_personalized_feed.dart';
 /// 5. Property Protection (Disputed Property & Property Legal Notices)
 /// 6. Personalized Feed ("Properties For You" matching active preference)
 /// 7. Real Property Feed / Empty State (Zero Fake Listings)
+/// 8. Native Sponsored Ad Slot (Direct Ad / AdMob Fallback)
 class PremiumHomeView extends StatelessWidget {
   const PremiumHomeView({super.key});
 
@@ -42,6 +45,10 @@ class PremiumHomeView extends StatelessWidget {
                   HomePropertyProtectionSection(),
                   HomePersonalizedFeed(),
                   HomeRealPropertyFeed(),
+                  AdSlotWidget(
+                    placement: 'HOME_NATIVE_SPONSORED',
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  ),
                   SizedBox(height: 32),
                 ],
               ),
