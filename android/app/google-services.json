@@ -14,19 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "1031008602596-kncq32bagn45bmoamjc0bfm06rpk51mc.apps.googleusercontent.com",
+          "client_id": "1031008602596-2inmh81r4pu2299pdngi8ugda5bhusie.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.belagavi.belagavi_property",
-            "certificate_hash": "b2c0945cc5cc4723dcee2687565fcc90c57920de"
-          }
-        },
-        {
-          "client_id": "1031008602596-android-release.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.belagavi.belagavi_property",
-            "certificate_hash": "22f1af982e59e8dce42c71c88af4ed6a1c03c5a0"
+            "certificate_hash": "4275c46d60c689ccbfca032792ea72bd121f8f12"
           }
         },
         {
