@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/direct_ad_entities.dart';
-import '../../data/datasources/admob_service.dart';
 import '../providers/advertising_providers.dart';
 
 class AdSlotWidget extends ConsumerStatefulWidget {
@@ -23,54 +21,7 @@ class AdSlotWidget extends ConsumerStatefulWidget {
 }
 
 class _AdSlotWidgetState extends ConsumerState<AdSlotWidget> {
-  BannerAd? _bannerAd;
-  bool _isBannerAdLoaded = false;
   bool _impressionLogged = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tryLoadAdMob();
-  }
-
-  void _tryLoadAdMob() {
-    if (!AdMobService.instance.isAdMobConfigured) return;
-
-    try {
-      _bannerAd = BannerAd(
-        adUnitId: AdMobService.instance.bannerAdUnitId,
-        request: const AdRequest(),
-        size: AdSize.banner,
-        listener: BannerAdListener(
-          onAdLoaded: (ad) {
-            if (mounted) {
-              setState(() {
-                _isBannerAdLoaded = true;
-              });
-            }
-          },
-          onAdFailedToLoad: (ad, err) {
-            ad.dispose();
-            _bannerAd = null;
-            if (mounted) {
-              setState(() {
-                _isBannerAdLoaded = false;
-              });
-            }
-          },
-        ),
-      )..load();
-    } catch (_) {
-      // Fail safely open
-      _bannerAd = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    _bannerAd?.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,21 +43,11 @@ class _AdSlotWidgetState extends ConsumerState<AdSlotWidget> {
           return _buildDirectAdCard(context, ad);
         }
 
-        // Priority 2: Fallback to AdMob Banner
-        if (_isBannerAdLoaded && _bannerAd != null) {
-          return _buildAdMobBanner(context);
-        }
-
-        // Priority 3: Fail Open (Empty space)
+        // Clean empty state / zero ad gap if no active approved direct sponsored ad
         return const SizedBox.shrink();
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) {
-        if (_isBannerAdLoaded && _bannerAd != null) {
-          return _buildAdMobBanner(context);
-        }
-        return const SizedBox.shrink();
-      },
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 
@@ -241,36 +182,6 @@ class _AdSlotWidgetState extends ConsumerState<AdSlotWidget> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildAdMobBanner(BuildContext context) {
-    return Padding(
-      padding: widget.padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Text(
-                'Advertisement',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: _bannerAd!.size.width.toDouble(),
-            height: _bannerAd!.size.height.toDouble(),
-            child: AdWidget(ad: _bannerAd!),
-          ),
-        ],
       ),
     );
   }

@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/direct_ad_entities.dart';
-import '../datasources/admob_service.dart';
 import '../datasources/direct_ads_remote_datasource.dart';
 
 class AdvertisingRepository {
@@ -89,6 +88,4 @@ class AdvertisingRepository {
       placement: placement,
     );
   }
-
-  bool get isAdMobAvailable => AdMobService.instance.isAdMobConfigured;
 }

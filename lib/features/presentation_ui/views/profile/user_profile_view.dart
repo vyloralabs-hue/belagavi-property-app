@@ -662,6 +662,36 @@ class _UserProfileViewState extends ConsumerState<UserProfileView> {
               iconColor: AppDesignSystem.brandGold,
               onTap: () => _showRoleManagementModal(context, ref),
             ),
+            _InteractiveActionTile(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Privacy Policy & Terms',
+              subtitle: 'Learn how your data, listings, and privacy are protected',
+              iconColor: const Color(0xFF0284C7),
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Privacy Policy & Data Security'),
+                    content: const SingleChildScrollView(
+                      child: Text(
+                        'Belagavi Property LLP is dedicated to protecting user privacy, personal contact information, and property confidentiality.\n\n'
+                        '1. Information We Collect: Phone number, email, display name, and property listing attributes provided voluntarily during registration and listing creation.\n\n'
+                        '2. Contact & Address Protection: Specific house numbers, exact street addresses, and private seller contact details are masked by default to prevent spam and privacy exposure.\n\n'
+                        '3. Data Rights & Deletion: You can update your profile or delete your account at any time via the Delete Account option in your profile.\n\n'
+                        '4. Inquiries: For privacy inquiries or grievances, contact privacy@belagaviproperty.in.',
+                        style: TextStyle(fontSize: 13, height: 1.4),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             const _BiometricSettingTile(),
 
             // ── 8. Logout / Sign In ──

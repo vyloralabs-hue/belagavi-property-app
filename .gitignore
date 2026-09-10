@@ -65,6 +65,7 @@ android/app/Users/
 # Keys, Credentials & Local Configs
 *.keystore
 *.jks
+*.pem
 key.properties
 local.properties
 .env*

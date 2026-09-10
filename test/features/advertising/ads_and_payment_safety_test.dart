@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/foundation.dart';
 import 'package:belagavi_property/features/monetization/presentation/services/razorpay_checkout_service.dart';
 import 'package:belagavi_property/features/advertising/domain/entities/direct_ad_entities.dart';
-import 'package:belagavi_property/features/advertising/data/datasources/admob_service.dart';
 
 void main() {
   group('Payment Safety Invariant Tests', () {
@@ -120,19 +118,8 @@ void main() {
     });
   });
 
-  group('Google AdMob Service & Safety Boundary Tests', () {
-    test('8. AdMob fallback service provides test ad unit in debug mode', () {
-      final admob = AdMobService.instance;
-      expect(admob.bannerAdUnitId, isNotEmpty);
-      expect(admob.bannerAdUnitId, startsWith('ca-app-pub-'));
-    });
-
-    test('9. AdMob configuration flag passes in test/debug', () {
-      final admob = AdMobService.instance;
-      expect(admob.isAdMobConfigured, isTrue);
-    });
-
-    test('10. Placement enum values match database check constraint', () {
+  group('Direct Advertising System & Safety Boundary Tests', () {
+    test('8. Placement enum values match database check constraint', () {
       expect(DirectAdPlacement.homeNativeSponsored.value, 'HOME_NATIVE_SPONSORED');
       expect(DirectAdPlacement.searchNativeSponsored.value, 'SEARCH_NATIVE_SPONSORED');
       expect(DirectAdPlacement.localityBanner.value, 'LOCALITY_BANNER');
