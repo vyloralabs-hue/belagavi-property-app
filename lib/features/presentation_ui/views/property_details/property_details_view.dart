@@ -16,6 +16,7 @@ import 'package:belagavi_property/features/chat/presentation/providers/chat_prov
 import 'package:url_launcher/url_launcher.dart';
 import 'widgets/property_reviews_widget.dart';
 import 'google_maps_launcher.dart';
+import 'package:belagavi_property/features/monetization/presentation/providers/payment_providers.dart';
 
 /// Property Details View â€” Master Marketplace Production Architecture
 class PropertyDetailsView extends ConsumerStatefulWidget {
@@ -56,7 +57,11 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
 
     try {
       final repo = ref.read(propertyRepositoryProvider);
-      final result = await repo.getPropertyById(widget.propertyId);
+      final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      final result = await repo.getPropertyById(
+        widget.propertyId,
+        requestingUserId: currentUid,
+      );
       result.fold(
         (failure) {
           if (mounted) {
@@ -1734,24 +1739,121 @@ class _PropertyDetailsViewState extends ConsumerState<PropertyDetailsView> {
                                 ),
                                 const SizedBox(height: 10),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: 0.04),
-                                    borderRadius: BorderRadius.circular(8),
+                                    color: AppDesignSystem.isDark(context) ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+                                    borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
-                                      color: Colors.grey.withValues(alpha: 0.2),
+                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
                                     ),
                                   ),
-                                  child: const Row(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Icon(Icons.lock_outline_rounded, size: 14, color: Colors.grey),
-                                      SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Owner direct contact and exact door number are privacy-protected. Available via Full Details Unlock.',
-                                          style: TextStyle(fontSize: 10, color: Colors.grey),
-                                        ),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFFD97706)),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              (property.address.isNotEmpty || property.features['ownerPhone'] != null)
+                                                  ? 'Full Details Unlocked'
+                                                  : 'Owner direct contact & exact door address are privacy-protected.',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppDesignSystem.isDark(context) ? Colors.amber.shade200 : const Color(0xFF92400E),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
+                                      if (property.address.isEmpty && property.features['ownerPhone'] == null) ...[
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton.icon(
+                                            onPressed: () async {
+                                              final user = FirebaseAuth.instance.currentUser;
+                                              if (user == null) {
+                                                context.push('/auth');
+                                                return;
+                                              }
+
+                                              // Call unlock RPC via payment repository
+                                              final repo = ref.read(paymentRepositoryProvider);
+                                              final res = await repo.unlockProperty(property.id);
+                                              res.fold(
+                                                (failure) {
+                                                  // Offer to purchase an unlock plan
+                                                  showDialog(
+                                                    context: context,
+                                                    builder: (dlgCtx) => AlertDialog(
+                                                      title: const Text('Unlock Property Details'),
+                                                      content: Text(
+                                                        '${failure.message}\n\nWould you like to get a Property Unlock pack?',
+                                                      ),
+                                                      actions: [
+                                                        TextButton(
+                                                          onPressed: () => Navigator.pop(dlgCtx),
+                                                          child: const Text('Cancel'),
+                                                        ),
+                                                        ElevatedButton(
+                                                          onPressed: () {
+                                                            Navigator.pop(dlgCtx);
+                                                            context.push('/pricing-plans', extra: {
+                                                              'productFamily': 'buyer_unlock',
+                                                            });
+                                                          },
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: AppDesignSystem.brandGold,
+                                                            foregroundColor: Colors.black,
+                                                          ),
+                                                          child: const Text('View Unlock Plans'),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                                (data) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('Property details unlocked successfully!'),
+                                                      backgroundColor: Color(0xFF10B981),
+                                                    ),
+                                                  );
+                                                  _fetchProperty();
+                                                },
+                                              );
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppDesignSystem.brandGold,
+                                              foregroundColor: Colors.black,
+                                              padding: const EdgeInsets.symmetric(vertical: 8),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            icon: const Icon(Icons.key_rounded, size: 14),
+                                            label: const Text(
+                                              'Unlock Full Details (1 Credit / ₹99)',
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                            ),
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        const SizedBox(height: 6),
+                                        if (property.features['ownerPhone'] != null)
+                                          Text(
+                                            'Direct Phone: ${property.features['ownerPhone']}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                          ),
+                                        if (property.address.isNotEmpty)
+                                          Text(
+                                              'Address: ${property.address}${property.pincode.isNotEmpty ? ' - ${property.pincode}' : ''}',
+                                              style: const TextStyle(fontSize: 12),
+                                          ),
+                                      ],
                                     ],
                                   ),
                                 ),

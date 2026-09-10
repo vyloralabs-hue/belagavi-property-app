@@ -391,10 +391,45 @@ class PropertyRemoteDataSourceImpl extends BaseRemoteDataSource
         return null;
       }
 
+      List<PropertyUnlockEntity> effectiveUnlocks = userUnlocks ?? const [];
+      if (effectiveUnlocks.isEmpty && requestingUserId != null && requestingUserId.isNotEmpty && _supabaseService.isInitialized) {
+        try {
+          final profileId = await OwnerIdentityBridge.resolveProfileId(
+            requestingUserId,
+            supabaseService: _supabaseService,
+          );
+          if (profileId != null) {
+            final unlockRes = await _supabaseService
+                .from('property_unlocks')
+                .select()
+                .eq('buyer_id', profileId)
+                .eq('property_id', rawProperty.id)
+                .eq('status', 'active');
+            final list = unlockRes as List<dynamic>;
+            if (list.isNotEmpty) {
+              final row = list.first as Map<String, dynamic>;
+              effectiveUnlocks = [
+                PropertyUnlockEntity(
+                  id: row['id']?.toString() ?? '',
+                  propertyId: rawProperty.id,
+                  userId: requestingUserId,
+                  unlockType: UnlockType.subscriptionPass,
+                  amount: ((row['amount_in_paise'] as num?)?.toDouble() ?? 0) / 100.0,
+                  unlockedAt: row['unlocked_at'] != null ? DateTime.tryParse(row['unlocked_at'].toString()) ?? DateTime.now() : DateTime.now(),
+                  expiresAt: row['expires_at'] != null ? DateTime.tryParse(row['expires_at'].toString()) : null,
+                  status: UnlockStatus.active,
+                  createdAt: row['created_at'] != null ? DateTime.tryParse(row['created_at'].toString()) ?? DateTime.now() : DateTime.now(),
+                ),
+              ];
+            }
+          }
+        } catch (_) {}
+      }
+
       final unlocked = PropertyUnlockGuard.isUnlocked(
         requestingUserId: requestingUserId,
         property: rawProperty,
-        userUnlocks: userUnlocks ?? const [],
+        userUnlocks: effectiveUnlocks,
       );
 
       if (unlocked) {

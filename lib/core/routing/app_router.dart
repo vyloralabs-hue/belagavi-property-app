@@ -64,6 +64,7 @@ import '../../features/intelligence/presentation/views/property_watch_view.dart'
 import '../../features/intelligence/presentation/views/add_property_watch_view.dart';
 import '../../features/presentation_ui/views/property/property_vault_view.dart';
 import '../../features/presentation_ui/views/monetization/pricing_plans_view.dart';
+import '../../features/presentation_ui/views/monetization/billing_plans_history_view.dart';
 import 'app_routes.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -289,6 +290,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             propertyId: extra?['propertyId'] as String?,
           );
         },
+      ),
+      GoRoute(
+        path: '/billing-history',
+        name: 'billing-history',
+        builder: (context, state) => const BillingPlansHistoryView(),
       ),
       GoRoute(
         path: AppRoutes.adsManagement,

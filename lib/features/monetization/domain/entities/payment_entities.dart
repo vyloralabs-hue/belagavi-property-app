@@ -1,87 +1,118 @@
 import 'package:equatable/equatable.dart';
 
-enum DiscountType { percentage, flatAmount }
-
-class PromoCouponEntity extends Equatable {
-  final String code;
-  final DiscountType discountType;
-  final double discountValue; // e.g. 10.0 for 10% or 500.0 for ₹500
-  final double minimumOrderAmount;
-  final DateTime expiryDate;
-  final bool isActive;
-
-  const PromoCouponEntity({
-    required this.code,
-    required this.discountType,
-    required this.discountValue,
-    this.minimumOrderAmount = 0.0,
-    required this.expiryDate,
-    this.isActive = true,
-  });
-
-  @override
-  List<Object?> get props => [
-        code,
-        discountType,
-        discountValue,
-        minimumOrderAmount,
-        expiryDate,
-        isActive,
-      ];
-}
-
-class InvoiceEntity extends Equatable {
-  final String invoiceNumber;
-  final String userId;
-  final String planId;
-  final double subtotalAmount;
-  final double discountAmount;
-  final double taxAmountGst; // 18% GST
-  final double totalPaidAmount;
-  final String currency; // 'INR', 'USD', 'AED'
-  final DateTime paidAt;
-
-  const InvoiceEntity({
-    required this.invoiceNumber,
-    required this.userId,
-    required this.planId,
-    required this.subtotalAmount,
-    required this.discountAmount,
-    required this.taxAmountGst,
-    required this.totalPaidAmount,
-    this.currency = 'INR',
-    required this.paidAt,
-  });
-
-  @override
-  List<Object?> get props => [
-        invoiceNumber,
-        userId,
-        planId,
-        subtotalAmount,
-        discountAmount,
-        taxAmountGst,
-        totalPaidAmount,
-        currency,
-        paidAt,
-      ];
-}
-
-class RazorpayOrderEntity extends Equatable {
+/// Server-Authoritative Payment Order Entity
+class PaymentOrderEntity extends Equatable {
   final String orderId;
-  final double amount;
+  final String planCode;
+  final String planName;
+  final String productFamily;
+  final int amountInPaise;
   final String currency;
-  final String receiptId;
+  final String? targetId;
   final String status;
+  final DateTime createdAt;
 
-  const RazorpayOrderEntity({
+  const PaymentOrderEntity({
     required this.orderId,
-    required this.amount,
-    required this.currency,
-    required this.receiptId,
+    required this.planCode,
+    required this.planName,
+    required this.productFamily,
+    required this.amountInPaise,
+    this.currency = 'INR',
+    this.targetId,
+    this.status = 'created',
+    required this.createdAt,
+  });
+
+  double get amountInRupees => amountInPaise / 100.0;
+  int get integerRupees => amountInPaise ~/ 100;
+
+  @override
+  List<Object?> get props => [
+        orderId,
+        planCode,
+        planName,
+        productFamily,
+        amountInPaise,
+        currency,
+        targetId,
+        status,
+        createdAt,
+      ];
+}
+
+/// Verification Result Entity
+class PaymentVerificationResultEntity extends Equatable {
+  final bool success;
+  final String status;
+  final String orderId;
+  final String paymentId;
+  final String planCode;
+  final String productFamily;
+  final int? creditsGranted;
+  final int? validityDays;
+  final DateTime? expiresAt;
+
+  const PaymentVerificationResultEntity({
+    required this.success,
     required this.status,
+    required this.orderId,
+    required this.paymentId,
+    required this.planCode,
+    required this.productFamily,
+    this.creditsGranted,
+    this.validityDays,
+    this.expiresAt,
   });
 
   @override
-  List<Object?> get props => [orderId, amount, currency, receiptId, status];
+  List<Object?> get props => [
+        success,
+        status,
+        orderId,
+        paymentId,
+        planCode,
+        productFamily,
+        creditsGranted,
+        validityDays,
+        expiresAt,
+      ];
+}
+
+/// User Billing Record Entity (Order + Transaction History)
+class BillingRecordEntity extends Equatable {
+  final String orderId;
+  final String planCode;
+  final String productFamily;
+  final int amountInPaise;
+  final String currency;
+  final String status;
+  final String? paymentId;
+  final DateTime createdAt;
+
+  const BillingRecordEntity({
+    required this.orderId,
+    required this.planCode,
+    required this.productFamily,
+    required this.amountInPaise,
+    this.currency = 'INR',
+    required this.status,
+    this.paymentId,
+    required this.createdAt,
+  });
+
+  double get amountInRupees => amountInPaise / 100.0;
+  int get integerRupees => amountInPaise ~/ 100;
+
+  @override
+  List<Object?> get props => [
+        orderId,
+        planCode,
+        productFamily,
+        amountInPaise,
+        currency,
+        status,
+        paymentId,
+        createdAt,
+      ];
 }

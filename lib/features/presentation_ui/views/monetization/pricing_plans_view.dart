@@ -1,8 +1,11 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:belagavi_property/features/monetization/domain/entities/pricing_plan_entity.dart';
 import 'package:belagavi_property/features/monetization/presentation/providers/pricing_providers.dart';
+import 'package:belagavi_property/features/monetization/presentation/providers/payment_providers.dart';
+import 'package:belagavi_property/features/monetization/presentation/services/razorpay_checkout_service.dart';
 import '../../theme/app_design_system.dart';
 
 /// Server-Authoritative Pricing Plans Catalog View.
@@ -361,70 +364,252 @@ class _PricingPlansViewState extends ConsumerState<PricingPlansView> {
     );
   }
 
-  void _handleChoosePlan(BuildContext context, PricingPlanEntity plan) {
-    // STRICT SECURITY RULE:
-    // Payment gateway is NOT IMPLEMENTED in this task.
-    // DO NOT grant fake entitlements or activate client-side.
+  void _handleChoosePlan(BuildContext context, PricingPlanEntity plan) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in to subscribe to a plan.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      context.push('/auth');
+      return;
+    }
+
+    final isMock = RazorpayCheckoutService.instance.isMockGateway;
+
+    // Show Order Confirmation and Checkout Dialog
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (modalContext) {
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        bool isSubmitting = false;
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.payment_outlined, color: AppDesignSystem.brandGold, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Payment Gateway Coming Soon',
-                      style: TextStyle(
-                        fontFamily: AppDesignSystem.fontFamily,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppDesignSystem.textP(modalContext),
+                  Row(
+                    children: [
+                      const Icon(Icons.payment_rounded, color: AppDesignSystem.brandGold, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Checkout — ${plan.name}',
+                          style: TextStyle(
+                            fontFamily: AppDesignSystem.fontFamily,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppDesignSystem.textP(modalContext),
+                          ),
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppDesignSystem.isDark(context)
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppDesignSystem.borderCol(context)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Plan Price', style: TextStyle(color: AppDesignSystem.textS(context), fontSize: 13)),
+                            Text(plan.formattedPrice, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Validity', style: TextStyle(color: AppDesignSystem.textS(context), fontSize: 13)),
+                            Text(plan.durationLabel, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          ],
+                        ),
+                        if (plan.creditCount > 1) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Quota / Credits', style: TextStyle(color: AppDesignSystem.textS(context), fontSize: 13)),
+                              Text('${plan.creditCount} unlocks', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (isMock)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFF59E0B)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, size: 16, color: Color(0xFFB45309)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Live payment gateway credentials pending. Sandbox test checkout available.',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              setModalState(() => isSubmitting = true);
+                              try {
+                                final notifier = ref.read(paymentProcessNotifierProvider.notifier);
+                                final order = await notifier.createOrder(
+                                  planCode: plan.code,
+                                  targetId: widget.propertyId,
+                                );
+
+                                if (order == null) {
+                                  setModalState(() => isSubmitting = false);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(ref.read(paymentProcessNotifierProvider).errorMessage ?? 'Order creation failed'),
+                                        backgroundColor: Colors.redAccent,
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+
+                                if (isMock) {
+                                  // Perform instant server-side verification in mock mode
+                                  final mockPayId = 'pay_mock_${DateTime.now().millisecondsSinceEpoch}';
+                                  final verifyRes = await notifier.completePayment(
+                                    orderId: order.orderId,
+                                    paymentId: mockPayId,
+                                    signature: 'mock_signature',
+                                  );
+
+                                  if (context.mounted) {
+                                    Navigator.pop(modalContext);
+                                    if (verifyRes != null && verifyRes.success) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Plan "${plan.name}" successfully activated!'),
+                                          backgroundColor: const Color(0xFF10B981),
+                                        ),
+                                      );
+                                      if (context.canPop()) {
+                                        context.pop();
+                                      } else {
+                                        context.go('/property-vault');
+                                      }
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Payment verification failed.'),
+                                          backgroundColor: Colors.redAccent,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                } else {
+                                  // Trigger physical Razorpay Checkout
+                                  RazorpayCheckoutService.instance.initialize(
+                                    onSuccess: (response) async {
+                                      final verifyRes = await notifier.completePayment(
+                                        orderId: order.orderId,
+                                        paymentId: response.paymentId ?? '',
+                                        signature: response.signature,
+                                      );
+                                      if (context.mounted) {
+                                        Navigator.pop(modalContext);
+                                        if (verifyRes != null && verifyRes.success) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Plan "${plan.name}" successfully activated!'),
+                                              backgroundColor: const Color(0xFF10B981),
+                                            ),
+                                          );
+                                          context.pop();
+                                        }
+                                      }
+                                    },
+                                    onFailure: (response) {
+                                      setModalState(() => isSubmitting = false);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Payment cancelled: ${response.message}'),
+                                            backgroundColor: Colors.redAccent,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  );
+
+                                  RazorpayCheckoutService.instance.openCheckout(
+                                    order: order,
+                                    userEmail: user.email ?? 'user@belagaviproperty.com',
+                                    userPhone: user.phoneNumber ?? '+919999999999',
+                                  );
+                                }
+                              } catch (e) {
+                                setModalState(() => isSubmitting = false);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                                  );
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppDesignSystem.brandGold,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                            )
+                          : Text(
+                              isMock ? 'Proceed with Test Checkout' : 'Proceed to Pay ${plan.formattedPrice}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              Text(
-                'You selected ${plan.name} for ${plan.formattedPrice}.',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Online payments (Razorpay/UPI) will be enabled in the upcoming release. No charge has been made and no fake entitlement is granted.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppDesignSystem.textS(modalContext),
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(modalContext),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppDesignSystem.brandGold,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Understood', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

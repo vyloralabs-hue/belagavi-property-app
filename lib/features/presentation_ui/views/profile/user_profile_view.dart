@@ -17,6 +17,7 @@ import '../../theme/app_theme_manager.dart';
 import '../../../property/presentation/providers/property_providers.dart';
 import '../../../property/domain/entities/property_entities.dart';
 import '../../../intelligence/presentation/views/property_preference_modal.dart';
+import '../../../monetization/presentation/providers/payment_providers.dart';
 
 class UserProfileView extends ConsumerStatefulWidget {
   const UserProfileView({super.key});
@@ -590,6 +591,13 @@ class _UserProfileViewState extends ConsumerState<UserProfileView> {
               onTap: () => context.push('/pricing-plans'),
             ),
             _InteractiveActionTile(
+              icon: Icons.receipt_long_rounded,
+              title: 'Billing & Plans History',
+              subtitle: 'View subscription receipts, active orders & payments',
+              iconColor: const Color(0xFF10B981),
+              onTap: () => context.push('/billing-history'),
+            ),
+            _InteractiveActionTile(
               icon: Icons.admin_panel_settings_rounded,
               title: 'Property Management (Admin)',
               subtitle: 'Global management authority across all listings',
@@ -662,6 +670,66 @@ class _UserProfileViewState extends ConsumerState<UserProfileView> {
                   if (context.mounted) {
                     context.go('/auth');
                   }
+                },
+              ),
+              const SizedBox(height: 12),
+              _InteractiveActionTile(
+                icon: Icons.delete_forever_rounded,
+                title: 'Delete Account',
+                subtitle: 'Permanently remove your account & active listings',
+                iconColor: Colors.red,
+                isDestructive: true,
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (dlgCtx) => AlertDialog(
+                      title: const Text('Delete Belagavi Property Account?'),
+                      content: const Text(
+                        'This will delete your personal profile and hide your active listings. '
+                        'Legal and financial transaction history is preserved as required by law.\n\n'
+                        'Are you sure you want to proceed?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dlgCtx),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            Navigator.pop(dlgCtx);
+                            try {
+                              final repo = ref.read(paymentRepositoryProvider);
+                              await repo.softDeleteAccount();
+                              await AuthSessionStorageHelper.logout();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Account deleted successfully.'),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                                context.go('/auth');
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to delete account: $e'),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Delete Account'),
+                        ),
+                      ],
+                    ),
+                  );
                 },
               ),
             ] else ...[
