@@ -151,7 +151,8 @@ class PropertyRemoteDataSourceImpl extends BaseRemoteDataSource
     return safeQuery(() async {
       List<PropertyModel> remoteModels = [];
       if (_supabaseService.isInitialized) {
-        var query = _supabaseService.from('properties').select('*, property_media(*)');
+        // Use properties_public view to guarantee physical column-level protection of address/contacts
+        var query = _supabaseService.from('properties_public').select('*, property_media(*)');
         query = query.eq('status', ListingStatus.active.dbValue);
         query = query.eq('is_paused', false);
 

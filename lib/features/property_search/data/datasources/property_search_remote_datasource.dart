@@ -40,7 +40,8 @@ class PropertySearchRemoteDataSourceImpl extends BaseRemoteDataSource
       }
 
       // Supabase Live Query Layer — database-first, bounded, indexed
-      var q = _supabaseService.from('properties').select();
+      // Uses properties_public view to enforce physical database column-level privacy
+      var q = _supabaseService.from('properties_public').select();
 
       // ── Public visibility isolation ─────────────────────────────────────────
       // NEVER expose draft / submitted / pending / under_review / rejected /
