@@ -4,8 +4,8 @@
 class AppBrandConfig {
   AppBrandConfig._();
 
-  static const String brandName = 'Belgaum Property';
-  static const String brandLegalName = 'Belgaum Property LLP';
+  static const String brandName = 'Belagavi Property';
+  static const String brandLegalName = 'Belagavi Property LLP';
   static const String brandTagline = 'Premium. Trusted. Yours.';
   static const String defaultCity = 'Belagavi';
   static const String defaultCurrency = '₹';

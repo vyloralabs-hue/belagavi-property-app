@@ -17,7 +17,7 @@ import '../../../advertising/presentation/widgets/ad_slot_widget.dart';
 /// 1. Top Bar (Brand Monogram, Location Pill, Language Pill, Profile)
 /// 2. Universal Search (Search input + Filter)
 /// 3. 4 Primary Categories (Residential, Plot, Commercial, Raw Land)
-/// 4. Invest with Belgaum Property LLP Banner
+/// 4. Invest with Belagavi Property LLP Banner
 /// 5. Property Protection (Disputed Property & Property Legal Notices)
 /// 6. Personalized Feed ("Properties For You" matching active preference)
 /// 7. Real Property Feed / Empty State (Zero Fake Listings)

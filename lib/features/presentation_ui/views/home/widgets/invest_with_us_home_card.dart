@@ -5,7 +5,7 @@ import '../../investment/invest_with_us_view.dart';
 
 /// Invest Banner — Production Dual-Theme Architecture
 /// Reference: Image 1 (Light Mode) & Image 2 (Dark Mode)
-/// Elements: "Invest with Belgaum Property LLP", Subtext, Gold "Explore Investments →" CTA, Building Graphic
+/// Elements: "Invest with Belagavi Property LLP", Subtext, Gold "Explore Investments →" CTA, Building Graphic
 class InvestWithUsHomeCard extends StatelessWidget {
   const InvestWithUsHomeCard({super.key});
 
